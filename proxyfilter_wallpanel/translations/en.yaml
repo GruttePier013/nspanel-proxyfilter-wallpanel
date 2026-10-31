@@ -1,0 +1,33 @@
+configuration:
+  upstream:
+    name: Home Assistant URL
+    description: "Address of Home Assistant as seen from this add-on. Leave the default unless you changed it."
+  mode:
+    name: Mode
+    description: "exclude: everything is sent to the panel except what is in the exclude file (recommended, new entities keep working). include: ONLY entities on the selected dashboards are sent."
+  exclude_file:
+    name: Exclude file (in the add-on config folder)
+    description: "File you create yourself in this add-on's own config folder (shown as addon_configs in Samba / File editor); the add-on only reads it. Change its name/location here, e.g. packages/proxyfilter_exclude.txt. Must end in .txt or .list."
+  local_only:
+    name: Local network only
+    description: "Refuse connections from public IP addresses (recommended). Turn off only if the panel connects from outside your network, and then use HTTPS in front."
+  trusted_proxies:
+    name: Trusted reverse proxies
+    description: "Only if you put nginx or similar IN FRONT of this add-on: its address or network (e.g. 192.168.1.5 or 172.30.32.0/23). Its X-Forwarded-For header is then trusted; from everybody else it is ignored."
+  heavy_per_minute:
+    name: Heavy entity warning (updates per minute)
+    description: "Dashboard entities that update more often than this get an orange warning in the log and the UI."
+  top:
+    name: Lines per log report list
+    description: "How many entities per list in the log (0 = no lists)."
+  min_per_minute:
+    name: Log threshold per minute
+    description: "Entities below this rate are hidden in the per-minute log reports."
+  min_per_hour:
+    name: Log threshold per hour
+    description: "Entities below this rate are hidden in the hourly log reports."
+  verbose:
+    name: Log every HTTP request
+    description: "Normally only errors and logins are logged."
+network:
+  8124/tcp: "Filtered Home Assistant address for the wall panel"

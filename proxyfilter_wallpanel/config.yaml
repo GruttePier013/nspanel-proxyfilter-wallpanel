@@ -1,0 +1,49 @@
+name: "Proxyfilter for photo/wallpanel"
+version: "2.0.0"
+slug: proxyfilter_wallpanel
+description: "Proxy filter that forwards only the traffic relevant to a wallpanel, photo frame or other small hardware device running the HA Companion app. It limits the CPU load on the device, which helps most on small CPUs such as Rockchip RK3326/RK3566, Allwinner A133, Amlogic S905 or MediaTek MT8163."
+url: "https://github.com/YOUR-GITHUB-USER/proxyfilter-wallpanel-addon"
+arch:
+  - aarch64
+  - amd64
+  - armv7
+stage: experimental
+init: false
+startup: application
+boot: auto
+watchdog: "http://[HOST]:[PORT:8124]/__health"
+ingress: true
+ingress_port: 8099
+panel_icon: "mdi:filter-variant"
+panel_title: "Proxyfilter"
+panel_admin: true
+ports:
+  8124/tcp: 8124
+ports_description:
+  8124/tcp: "Filtered Home Assistant address for the wall panel"
+map:
+  - homeassistant_config:ro
+  - addon_config:ro
+options:
+  upstream: "http://homeassistant:8123"
+  mode: exclude
+  exclude_file: "proxyfilter_exclude.txt"
+  local_only: true
+  trusted_proxies: []
+  heavy_per_minute: 20
+  top: 25
+  min_per_minute: 2
+  min_per_hour: 120
+  verbose: false
+schema:
+  upstream: url
+  mode: list(include|exclude)
+  local_only: bool
+  trusted_proxies:
+    - str
+  exclude_file: match(^[A-Za-z0-9_][A-Za-z0-9_./-]*\.(txt|list)$)
+  heavy_per_minute: float(1,)
+  top: int(0,200)
+  min_per_minute: float(0,)
+  min_per_hour: float(0,)
+  verbose: bool

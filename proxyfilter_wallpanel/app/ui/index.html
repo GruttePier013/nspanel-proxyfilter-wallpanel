@@ -1,0 +1,225 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proxyfilter for photo/wallpanel</title>
+<style>
+:root{--bg:#f4f6fa;--card:#fff;--ink:#14213d;--mute:#5b6b86;--line:#dbe2ee;--accent:#2563eb;--accent-ink:#fff;
+--ok:#16a34a;--warn:#d97706;--warn-bg:#fff4e5;--bad:#dc2626;--pill:#e8f0ff;--pill-ink:#1d4ed8;--code:#0b1220;--code-ink:#d6e4ff}
+@media (prefers-color-scheme:dark){:root{--bg:#0e1522;--card:#16202f;--ink:#e6edf7;--mute:#93a4bf;--line:#26344a;--accent:#4d8dff;
+--accent-ink:#04122b;--ok:#4ade80;--warn:#fbbf24;--warn-bg:#3a2a0c;--bad:#f87171;--pill:#1c2f52;--pill-ink:#9cc2ff;--code:#080d16;--code-ink:#cfe0ff}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:980px;margin:0 auto;padding:16px}
+header{display:flex;align-items:center;gap:14px;margin:4px 0 16px}
+header svg{width:52px;height:52px;flex:none}
+h1{font-size:22px;margin:0}h1 small{font-weight:400;color:var(--mute);font-size:13px;margin-left:6px}
+header p{margin:0;color:var(--mute)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:14px}
+.card h2{font-size:16px;margin:0 0 2px}.card .sub{color:var(--mute);margin:0 0 12px;font-size:13.5px}
+.step{display:inline-grid;place-items:center;width:22px;height:22px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-size:12px;font-weight:700;margin-right:8px}
+.pills{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0}
+.pill{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:999px;padding:5px 12px;font:inherit;cursor:pointer}
+.pill.on{background:var(--accent);color:var(--accent-ink)}
+.pill.on .x{opacity:.8;font-weight:700}
+.pill.add{background:transparent;border:1px dashed var(--accent);color:var(--pill-ink)}
+.pill.add:hover{background:var(--pill)}
+.pill.bad{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
+.pill small{opacity:.75}
+.empty{color:var(--mute);font-style:italic}
+.warn{background:var(--warn-bg);border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;margin:6px 0;color:var(--ink)}
+.warn b{color:var(--warn)}
+.ok{border-left-color:var(--ok);background:transparent;border:1px solid var(--line);border-left:4px solid var(--ok)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.stat b{display:block;font-size:22px}.stat span{color:var(--mute);font-size:12.5px}
+textarea{width:100%;min-height:240px;background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:10px;
+padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical}
+button.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:9px;padding:8px 16px;font:inherit;font-weight:600;cursor:pointer}
+button.btn.sec{background:transparent;color:var(--ink);border:1px solid var(--line)}
+button.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:10px}
+.msg{font-size:13.5px}.msg.err{color:var(--bad)}.msg.good{color:var(--ok)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+td,th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left}th{color:var(--mute);font-weight:500;font-size:12.5px}
+td.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
+code{background:var(--pill);color:var(--pill-ink);border-radius:5px;padding:1px 6px;font-size:13px}
+td code{background:none;color:var(--ink);padding:0}
+.mini{font-size:12.5px;padding:2px 10px}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--mute)}
+.dot.on{background:var(--ok)}
+details summary{cursor:pointer;color:var(--mute)}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <svg viewBox="0 0 128 128" aria-hidden="true"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0f2a4a"/><stop offset="1" stop-color="#1e5aa8"/></linearGradient></defs>
+  <rect width="128" height="128" rx="28" fill="url(#g)"/><rect x="18" y="26" width="92" height="64" rx="9" fill="#0b1220" stroke="#cfe3ff" stroke-width="3"/>
+  <rect x="24" y="32" width="80" height="52" rx="5" fill="#14335c"/><rect x="30" y="38" width="34" height="18" rx="3" fill="#4da3ff"/><rect x="68" y="38" width="30" height="18" rx="3" fill="#7cc4ff" opacity=".8"/>
+  <rect x="30" y="60" width="22" height="18" rx="3" fill="#7cc4ff" opacity=".8"/><rect x="56" y="60" width="42" height="18" rx="3" fill="#4da3ff"/>
+  <circle cx="100" cy="100" r="21" fill="#22c55e" stroke="#0f2a4a" stroke-width="4"/><path d="M89 92h22l-8 10v10l-6-3v-7z" fill="#fff"/></svg>
+  <div><h1>Proxyfilter for photo/wallpanel <small>v__VERSION__</small></h1><p>Keeps the entity traffic to your wall panel small, so it stays fast.</p></div>
+</header>
+
+<div id="warnings"></div>
+
+<section class="card">
+  <h2><span class="step">1</span>Dashboards the wall panel opens</h2>
+  <p class="sub">Every entity used on these dashboards is always sent to the panel, so they can never break. Click a dashed pill to add it.</p>
+  <div class="pills" id="dash-on"></div>
+  <div class="pills" id="dash-add"></div>
+</section>
+
+<section class="card">
+  <h2><span class="step">2</span>Which connections are filtered?</h2>
+  <p class="sub">Choose how the add-on recognises the wall panel.</p>
+  <div class="pills" id="scope"></div>
+  <p class="sub" id="scope-help"></p>
+  <div id="users-box">
+    <div class="pills" id="user-on"></div>
+    <div class="pills" id="user-add"></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2><span class="step">3</span>Point the panel to the filter</h2>
+  <p class="sub">In the Companion app of the wall panel set the server URL to: <code id="panel-url">http://&lt;home-assistant-ip&gt;:8124</code> and log in (as the selected user, if you chose that option).</p>
+  <div class="grid" id="stats"></div>
+  <div id="status-line" class="msg" style="margin-top:10px"></div>
+</section>
+
+<section class="card">
+  <h2><span class="step">4</span>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
+  <p class="sub">The add-on only <b>reads</b> this file &ndash; it has no permission to change anything in your Home Assistant folder. You create and edit the file yourself in this add-on's own config folder (<code>addon_configs</code> in Samba or the File editor add-on); changes are picked up within 30 seconds. Entities on your dashboards are never blocked.</p>
+  <div id="file-status"></div>
+  <details open><summary>Current file (read-only)</summary><textarea id="cur" readonly spellcheck="false" aria-label="Current exclude file"></textarea></details>
+  <h2 style="margin-top:14px;font-size:15px">New lines to add</h2>
+  <p class="sub">Click <b>exclude</b> in the list below, or paste log lines / patterns here (one per line, <code>sensor.example_*</code>). Then copy them into the file.</p>
+  <textarea id="ed" spellcheck="false" aria-label="Lines to add" style="min-height:110px"></textarea>
+  <div class="row"><button class="btn" id="copy-new">Copy new lines</button><button class="btn sec" id="copy-all">Copy complete file</button><button class="btn sec" id="clear">Clear</button><span class="msg" id="save-msg"></span></div>
+  <div id="save-warn"></div>
+</section>
+
+<section class="card">
+  <h2>Noisiest entities that still reach the panel</h2>
+  <p class="sub">Measured while the panel is connected. Click <b>exclude</b> to add an entity to the editor above (then Save), or use a wildcard to cover a whole device.</p>
+  <div class="pills" id="wild"></div>
+  <table><thead><tr><th>Entity</th><th class="n">per min</th><th></th></tr></thead><tbody id="cand"></tbody></table>
+  <p class="empty" id="cand-empty" hidden>Nothing noisy is reaching the panel right now (or it has not been connected long enough).</p>
+</section>
+
+<details class="card"><summary>How does this work?</summary>
+<p class="sub" style="margin-top:10px">Home Assistant sends every state change of every entity to every open dashboard. A weak wall panel spends nearly all its CPU on updates it never displays. This add-on sits between the panel and Home Assistant, recognises the panel by its user and forwards only the entities it needs. Login, the dashboard itself and all other traffic pass through unchanged. If anything goes wrong, connections fall back to the unfiltered stream, so the panel keeps working.</p></details>
+</main>
+<script>
+"use strict";
+const $=id=>document.getElementById(id);
+let S=null, dirty=false;
+const api=(p,o)=>fetch("api/"+p,o).then(async r=>{const j=await r.json().catch(()=>({ok:false,error:"bad response"}));return {status:r.status,...j}});
+const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
+function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+
+function pills(onBox,addBox,selected,available,label,onChange,emptyText){
+  onBox.replaceChildren();addBox.replaceChildren();
+  if(!selected.length)onBox.append(el("span","empty",emptyText));
+  for(const key of selected){
+    const a=available.find(x=>x.key===key);
+    const p=el("button","pill on"+(a&&a.ok===false?" bad":""));p.type="button";
+    p.append(el("span",null,a?a.title:key));
+    if(a&&a.note)p.append(el("small",null,a.note));
+    if(!a)p.append(el("small",null,"missing"));
+    p.append(el("span","x","×"));p.title="Remove";
+    p.onclick=()=>onChange(selected.filter(k=>k!==key));onBox.append(p);
+  }
+  for(const a of available.filter(x=>!selected.includes(x.key))){
+    const p=el("button","pill add","+ "+a.title);p.type="button";
+    if(a.note)p.append(el("small",null," "+a.note));
+    p.onclick=()=>onChange([...selected,a.key]);addBox.append(p);
+  }
+}
+async function setDash(keys){const r=await post("dashboards",{keys});if(r.ok){S=r.state;render()}else toast(r.error)}
+async function setThrottle(entity,seconds){const r=await post("throttle",{entity,seconds});if(r.ok){S=r.state;render()}else toast(r.error)}
+async function setScope(scope){const r=await post("scope",{scope});if(r.ok){S=r.state;render()}else toast(r.error)}
+async function setUsers(names){const r=await post("users",{names});if(r.ok){S=r.state;render()}else toast(r.error)}
+function toast(t){msg(t,"err")}
+
+function render(){
+  const s=S;
+  $("panel-url").textContent="http://"+location.hostname+":"+s.panel_port;
+  const w=$("warnings");w.replaceChildren();
+  for(const x of s.warnings){const d=el("div","warn");d.append(el("b",null,"⚠ "),document.createTextNode(x.text));w.append(d)}
+  for(const h of s.heavy){const d=el("div","warn");d.append(el("b",null,"\u26a0 Heavy dashboard entity: "),document.createTextNode(h.entity+" updates "+h.rate+"\u00d7/min and always reaches the panel. Remove it from the dashboard, or slow it down: "));
+    for(const sec of [5,10,30,60]){const p=el("button","pill add mini","max 1 per "+sec+" s");p.type="button";p.onclick=()=>setThrottle(h.entity,sec);d.append(p," ")}
+    w.append(d)}
+  for(const t of s.throttled){const d=el("div","warn ok");d.append(el("b",null,"\u23f1 Throttled: "),document.createTextNode(t.entity+" \u2013 at most 1 update per "+t.seconds+" s (HA sends "+t.rate+"/min). "));
+    const p=el("button","pill add mini","remove");p.type="button";p.onclick=()=>setThrottle(t.entity,0);d.append(p);w.append(d)}
+  if(!s.warnings.length&&!s.heavy.length){const d=el("div","warn ok","✓ Setup looks good.");w.append(d)}
+  pills($("dash-on"),$("dash-add"),s.settings.dashboards,
+    s.dashboards.map(d=>({key:d.key,title:d.title,ok:d.exists,note:d.exists?"":"not saved yet"})),"dashboard",setDash,"No dashboard selected yet");
+  const sc=$("scope");sc.replaceChildren();
+  for(const [k,t] of [["port","Dedicated port (recommended)"],["users","By Home Assistant user"]]){
+    const p=el("button","pill "+(s.settings.scope===k?"on":"add"),t);p.type="button";p.onclick=()=>setScope(k);sc.append(p)}
+  $("scope-help").textContent=s.settings.scope==="port"
+    ?"Everything that connects to port "+s.panel_port+" is filtered. Only the wall panel uses this port; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved, which makes this the simplest and safest option. Firewall this port to the panel's IP address if you can."
+    :"Only connections that log in as the selected users are filtered, so one port can serve everybody. Create a dedicated user for the panel (Settings \u2192 People).";
+  $("users-box").hidden=s.settings.scope!=="users";
+  pills($("user-on"),$("user-add"),s.settings.users,s.users.map(u=>({key:u,title:u})),"user",setUsers,"Nobody selected \u2013 every connection is filtered");
+  const st=s.status,box=$("stats");box.replaceChildren();
+  const add=(v,l)=>{const d=el("div","stat");d.append(el("b",null,v),el("span",null,l));box.append(d)};
+  add(st.filtered+" / "+st.clients,"filtered / open connections");
+  add(st.in_per_min,"updates per min from HA");
+  add(st.out_per_min,"updates per min to panel");
+  add(st.in_per_min?Math.round(100*(1-st.out_per_min/st.in_per_min))+"%":"–","traffic removed");
+  add(st.dashboard_entities,"dashboard entities");
+  add(st.exclude_patterns,"exclude patterns");
+  const sl=$("status-line");sl.replaceChildren();
+  const on=st.filtered>0;
+  const dot=el("span","dot"+(on?" on":""));sl.append(dot,document.createTextNode(on?"A panel is connected and filtered.":
+    st.seconds_since_filtered==null?"No filtered connection seen yet – connect the panel with the URL above.":
+    (st.seconds_since_filtered<90?"Last filtered connection just now.":"Last filtered connection "+Math.round(st.seconds_since_filtered/60)+" min ago.")));
+  $("file-name").textContent=s.exclude.name?"("+s.exclude.name+")":"";
+  const wl=$("wild");wl.replaceChildren();
+  for(const x of s.wildcards){const p=el("button","pill add","+ "+x.pattern);p.type="button";p.append(el("small",null," "+x.entities+" entities · "+x.rate+"/min"));p.onclick=()=>addLine(x.pattern);wl.append(p)}
+  const tb=$("cand");tb.replaceChildren();
+  for(const c of s.candidates){const tr=el("tr");const td=el("td");td.append(el("code",null,c.entity));
+    const n=el("td","n",c.rate.toFixed(1));const b=el("td");const btn=el("button","pill add mini","exclude");btn.type="button";btn.onclick=()=>addLine(c.entity);b.append(btn);tr.append(td,n,b);tb.append(tr)}
+  $("cand-empty").hidden=s.candidates.length>0;
+}
+function addLine(pat){const t=$("ed");if(t.value.split("\n").some(l=>l.split("#")[0].trim()===pat))return;
+  t.value=t.value.replace(/\n*$/,"\n").replace(/^\n/,"")+pat+"\n";t.scrollTop=t.scrollHeight;
+  msg("Added "+pat+" \u2013 copy the new lines into the file.","")}
+function msg(t,cls){const m=$("save-msg");m.className="msg "+cls;m.textContent=t}
+let CUR=null;
+async function loadFile(){
+  const r=await api("exclude");const box=$("file-status");box.replaceChildren();
+  if(!r.ok){box.append(el("div","warn",r.error||"cannot read exclude file"));return}
+  CUR=r;$("cur").value=r.exists?r.text:"(the file does not exist yet)";
+  if(!r.exists){const d=el("div","warn");d.append(el("b",null,"\u26a0 "),document.createTextNode("The file does not exist yet, so nothing is excluded. Create it in the add-on's config folder (addon_configs, via Samba or File editor) and paste the template with \u201cCopy complete file\u201d."));box.append(d)}
+  for(const e of r.errors||[]){const d=el("div","warn");d.append(el("b",null,"\u26a0 In the file: "),document.createTextNode(e));box.append(d)}
+}
+async function prepared(){
+  const sw=$("save-warn");sw.replaceChildren();
+  const r=await post("exclude/normalize",{text:$("ed").value});
+  if(!r.ok){msg("Cannot copy:","err");for(const x of r.errors||[]){sw.append(el("div","warn",x))}return null}
+  for(const x of r.warnings||[]){const d=el("div","warn");d.append(el("b",null,"\u26a0 "),document.createTextNode(x));sw.append(d)}
+  $("ed").value=r.text.trim()?r.text:"";return r.text.trim()?r.text:"";
+}
+async function copyText(text,okmsg){
+  try{await navigator.clipboard.writeText(text);msg(okmsg,"good");return}catch(e){}
+  const t=document.createElement("textarea");t.value=text;document.body.append(t);t.select();
+  let ok=false;try{ok=document.execCommand("copy")}catch(e){}t.remove();
+  msg(ok?okmsg:"Copy was blocked by the browser \u2013 select the text in the box and press Ctrl+C.",ok?"good":"err");
+}
+$("copy-new").onclick=async()=>{const t=await prepared();if(t===null)return;if(!t){msg("Nothing to copy yet.","");return}
+  await copyText(t,"Copied. Paste it at the end of "+(S.exclude.name||"the file")+".")};
+$("copy-all").onclick=async()=>{const t=await prepared();if(t===null)return;if(!CUR)await loadFile();
+  const base=CUR&&CUR.exists?CUR.text.replace(/\n*$/,"\n"):(CUR?CUR.template:"");
+  await copyText(base+(t?"\n"+t:""),"Copied the complete file"+(CUR&&CUR.exists?"":" (with template)")+".")};
+$("clear").onclick=()=>{$("ed").value="";$("save-warn").replaceChildren();msg("","")};
+async function refresh(){const r=await api("state");if(r.version){S=r;render()}}
+(async()=>{await refresh();await loadFile();setInterval(refresh,5000);setInterval(loadFile,30000)})();
+</script>
+</body>
+</html>

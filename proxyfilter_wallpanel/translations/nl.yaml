@@ -1,0 +1,33 @@
+configuration:
+  upstream:
+    name: Home Assistant URL
+    description: "Adres van Home Assistant zoals deze add-on het ziet. Laat staan tenzij je het hebt aangepast."
+  mode:
+    name: Modus
+    description: "exclude: alles gaat naar het paneel behalve wat in het exclude-bestand staat (aanbevolen, nieuwe entities blijven werken). include: ALLEEN entities van de gekozen dashboards gaan door."
+  exclude_file:
+    name: Exclude-bestand (in de add-on-configmap)
+    description: "Bestand dat je zelf aanmaakt in de eigen configmap van deze add-on (zichtbaar als addon_configs in Samba / File editor); de add-on leest het alleen. Wijzig hier naam/locatie, bijv. packages/proxyfilter_exclude.txt. Moet op .txt of .list eindigen."
+  local_only:
+    name: Alleen lokaal netwerk
+    description: "Weiger verbindingen vanaf publieke IP-adressen (aanbevolen). Alleen uitzetten als het paneel van buiten je netwerk verbindt, en zet er dan HTTPS voor."
+  trusted_proxies:
+    name: Vertrouwde reverse proxies
+    description: "Alleen als je nginx of iets dergelijks VOOR deze add-on zet: adres of netwerk (bijv. 192.168.1.5 of 172.30.32.0/23). Diens X-Forwarded-For wordt dan vertrouwd; van alle anderen wordt hij genegeerd."
+  heavy_per_minute:
+    name: Waarschuwing zware entity (updates per minuut)
+    description: "Dashboard-entities die vaker updaten krijgen een oranje waarschuwing in het log en de UI."
+  top:
+    name: Regels per lijst in het log
+    description: "Hoeveel entities per lijst in het log (0 = geen lijsten)."
+  min_per_minute:
+    name: Log-drempel per minuut
+    description: "Entities onder deze snelheid worden niet getoond in de per-minuutrapporten."
+  min_per_hour:
+    name: Log-drempel per uur
+    description: "Entities onder deze snelheid worden niet getoond in de uurrapporten."
+  verbose:
+    name: Elk HTTP-verzoek loggen
+    description: "Normaal worden alleen fouten en inlogpogingen gelogd."
+network:
+  8124/tcp: "Gefilterd Home Assistant-adres voor het wandpaneel"
