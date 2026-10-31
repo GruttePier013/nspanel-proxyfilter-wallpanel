@@ -15,7 +15,7 @@ reveal more than Home Assistant would send to that user anyway.
 | Client forges `X-Forwarded-For` to bypass bans / "local only" users / trusted networks | client forwarding headers are always stripped; address replaced by the verified one; `trusted_proxies` explicit opt-in |
 | Memory exhaustion by big uploads/messages | request bodies streamed; client websocket messages ≤ 16 MB |
 | Failed-login bans provoked via the add-on | user lookup only after HA accepted the token; real client IP forwarded when HA supports it |
-| Web UI changes what is filtered | Dashboards, scope and users cannot be changed from the UI at all (only from the add-on configuration); the UI can only edit the exclude file and throttles |
+| Web UI changes what is filtered | Only reachable through Home Assistant ingress (admins); JSON-only POSTs, strict validation and limits; writes only the exclude file and the add-on's private settings |
 | Add-on bug → modify Home Assistant configuration | HA config mapped **read-only**; the add-on can write only its own config folder (exclude file, with `.bak`) and private `/data` |
 | Path traversal in options / UI | exclude file confined to the add-on config folder (symlinks resolved); dashboards only by validated ids from HA's own list |
 | Log forging via URLs / user names | control characters replaced before logging; query strings and tokens never logged |

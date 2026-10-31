@@ -192,6 +192,12 @@ async def main():
     check(m == {"+": {"s": "2", "a": {"x": 5, "z": 9}}, "-": {"a": ["y"]}}, f"merge_diff keeps the latest value and attribute removals ({m})")
     check(md(None, {"+": {"s": "3"}}) == {"+": {"s": "3"}}, "merge_diff with nothing held")
 
+    import re as _re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfgv = _re.search(r'^version: "([^"]+)"', open(os.path.join(root, "proxyfilter_wallpanel", "config.yaml")).read(), _re.M).group(1)
+    topv = _re.search(r"^## (\S+)", open(os.path.join(root, "proxyfilter_wallpanel", "CHANGELOG.md")).read(), _re.M).group(1)
+    check(cfgv == wf.VERSION == topv, f"version consistent: config.yaml {cfgv}, script {wf.VERSION}, changelog {topv}")
+
     # ---- start mock HA + add-on
     mock = web.Application()
     mock.router.add_get("/api/websocket", mock_ws)
@@ -201,18 +207,11 @@ async def main():
     mr = web.AppRunner(mock, access_log=None)
     await mr.setup()
     await web.TCPSite(mr, "127.0.0.1", MOCK).start()
-    optfile = os.path.join(tmp, "options.json")
-    json.dump({"dashboards": [], "scope": "port", "users": []}, open(optfile, "w"))
-
-    async def setopts(**o):
-        json.dump(o, open(optfile, "w"))
-        await asyncio.sleep(2.2)                       # the reloader runs every second
-
     args = wf.parse_args(["--upstream", f"http://127.0.0.1:{MOCK}", "--config-dir", cfg, "--data-dir", data,
                           "--listen", f"127.0.0.1:{PROXY}", "--ui-listen", f"127.0.0.1:{UI}",
                           "--exclude-file", os.path.join(tmp, "addon_config", "proxyfilter_exclude.txt"),
                           "--heavy-per-min", "5", "--report", "1", "--fast-count", "3", "--reload", "1",
-                          "--options", os.path.join(tmp, "options.json")])
+                          ])
     runners, app = await wf.start_servers(args)
     buf = LOG
     exc_path = os.path.join(tmp, "addon_config", "proxyfilter_exclude.txt")
@@ -241,29 +240,20 @@ async def main():
         got = await collect("tok-alice", 0.6)
         check("sensor.example_inverter_power" not in got and SEEN["ws_count"] - count0 == 1,
               "dedicated port: everybody filtered, no extra lookup connection to HA")
-        for ep in ("api/scope", "api/dashboards", "api/users"):
-            async with s.post(f"http://127.0.0.1:{UI}/{ep}", json={"scope": "users"}) as r:
-                st = r.status
-            check(st in (404, 405), f"{ep} no longer exists: dashboards/scope/users come from the add-on configuration")
-        await setopts(dashboards=[], scope="users", users=[])
-        st, j = await jget(s, "api/state")
-        check(any("No user selected" in w["text"] for w in j["warnings"]), "users scope without a user: warning")
-        await setopts(dashboards=["wall_panel", "../evil", "nope"], scope="port", users=[])
-        st, j = await jget(s, "api/state")
-        check(j["settings"]["dashboards"] == ["wall_panel"] and j["unknown_dashboards"] == ["../evil", "nope"],
-              "configured dashboards resolved by URL name; unknown names reported")
-        check(any("does not match any dashboard" in w["text"] for w in j["warnings"]), "warning for unknown dashboard name")
-        check("camera.example_door" in app["allow"].exact, "dashboard entities loaded after a configuration change (no restart)")
-        check(any("camera.* entity" in w["text"] for w in j["warnings"]), "static heavy warning (camera on dashboard)")
-        check(not any("No dashboard selected" in w["text"] for w in j["warnings"]), "no-dashboard warning cleared")
-        await setopts(dashboards=["WALL PANEL", "default"], scope="users", users=["wall panel"])
-        st, j = await jget(s, "api/state")
-        check(j["settings"]["dashboards"] == ["wall_panel", "lovelace"] and j["settings"]["users"] == ["wall panel"]
-              and not j["unknown_dashboards"], "names are case-insensitive; 'default' = default dashboard; user taken over")
-        check(app["users"] == {"wall panel"}, "user scope active after configuration change")
-        await setopts(dashboards=["wall_panel"], scope="users", users=["wall panel"])
-        check(not os.path.exists(os.path.join(data, "settings.json")) or "users" not in json.load(open(os.path.join(data, "settings.json"))),
-              "dashboards/users are not persisted in /data (configuration is the single source)")
+        st, j = await jpost(s, "api/scope", {"scope": "users"})
+        check(j["ok"] and any("No user selected" in w["text"] for w in j["state"]["warnings"]), "users scope without a user: warning")
+        st, j = await jpost(s, "api/scope", {"scope": "bogus"})
+        check(st == 400, "invalid scope refused")
+
+        # select dashboard + user through the UI API
+        st, j = await jpost(s, "api/dashboards", {"keys": ["wall_panel", "../evil", "nope"]})
+        check(j["ok"] and j["state"]["settings"]["dashboards"] == ["wall_panel"], "only known dashboards accepted")
+        check("camera.example_door" in app["allow"].exact, "dashboard entities loaded")
+        check(any("camera.* entity" in w["text"] for w in j["state"]["warnings"]), "static heavy warning (camera on dashboard)")
+        check(not any("No dashboard selected" in w["text"] for w in j["state"]["warnings"]), "no-dashboard warning cleared")
+        st, j = await jpost(s, "api/users", {"names": ["wall panel"]})
+        check(j["ok"], "user selected (case-insensitive)")
+        check(json.load(open(os.path.join(data, "settings.json")))["users"] == ["wall panel"], "settings persisted in /data")
 
         # throttling a dashboard entity
         for bad in ({"entity": "../x", "seconds": 5}, {"entity": "camera.example_door", "seconds": 9999}, {"entity": "camera.example_door", "seconds": True}):

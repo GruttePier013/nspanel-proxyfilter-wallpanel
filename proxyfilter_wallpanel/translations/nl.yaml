@@ -1,16 +1,7 @@
 configuration:
-  dashboards:
-    name: Dashboards die het wandpaneel opent
-    description: "URL-namen van de dashboards die je wandpaneel toont (het deel achter de / in het adres, bijv. wallpanel; gebruik default voor het standaarddashboard). Elke entity die erop staat gaat altijd naar het paneel. Open de web-UI van de add-on om te zien welke namen je kunt gebruiken."
-  scope:
-    name: Welke verbindingen worden gefilterd
-    description: "port (aanbevolen): alles wat verbindt met poort 8124 van de add-on wordt gefilterd, alleen het wandpaneel hoort die te gebruiken. users: alleen de hieronder genoemde Home Assistant-gebruikers worden gefilterd."
-  users:
-    name: Te filteren gebruikers (alleen bij scope = users)
-    description: "Naam van de Home Assistant-gebruiker waarmee het wandpaneel inlogt. Wordt genegeerd bij scope port."
   upstream:
     name: Home Assistant URL
-    description: "Adres van Home Assistant zoals deze add-on het ziet. Laat staan tenzij je het hebt aangepast."
+    description: "👉 **STAP 1 ▶ Start de WEB-UI om de configuratie te voltooien** (kies daar je dashboards en filterbereik). De opties hieronder zijn geavanceerd en hoeven zelden te worden aangepast. \n\nAdres van Home Assistant zoals deze add-on het ziet. Laat staan tenzij je het hebt aangepast."
   mode:
     name: Modus
     description: "exclude: alles gaat naar het paneel behalve wat in het exclude-bestand staat (aanbevolen, nieuwe entities blijven werken). include: ALLEEN entities van de gekozen dashboards gaan door."

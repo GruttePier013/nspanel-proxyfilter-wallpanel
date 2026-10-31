@@ -1,5 +1,8 @@
 # Proxyfilter for photo/wallpanel
 
+> ### 👉 STEP 1 ▶ **Start the WEB-UI to complete the configuration** 🖥️
+> Open *Proxyfilter for photo/wallpanel* in the sidebar and pick your dashboards there. ✅
+
 Proxy filter designed to feed only the traffic that is relevant to a wallpanel, photo frame or other small
 hardware device running the Home Assistant Companion app. The purpose is to use as little of the device's CPU as
 possible, which is especially handy for small CPUs, for example:
@@ -15,7 +18,7 @@ How it works: the Home Assistant frontend receives every state change of every e
 the entities the device needs, for a dedicated port or for the Home Assistant user(s) you select. Everything else
 passes through unchanged.
 
-* Dashboards, scope and users are set in the normal Configuration tab; the sidebar UI shows the result and handles filters and throttling
+* Visual setup in the sidebar: pick dashboards with pill buttons, filter a dedicated port or a user; also filters, throttling and checks
 * Exclude list editor in the UI (file created in the add-on's own folder); "Check an entity" explains every decision
 * Orange warnings for heavy entities and risky setups; throttling for busy entities
 * Fail-open: when in doubt the device gets the normal stream

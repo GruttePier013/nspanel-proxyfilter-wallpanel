@@ -6,6 +6,9 @@
 
 **Make a slow wallpanel or photo frame fast – without disabling a single entity.**
 
+> ### 👉 STEP 1 ▶ **Start the WEB-UI to complete the configuration** 🖥️
+> Open *Proxyfilter for photo/wallpanel* in the sidebar and pick your dashboards there. ✅
+
 > Status: experimental. Please report problems via GitHub issues.
 
 Proxy filter designed to feed only the traffic that is relevant to a wallpanel, photo frame or other small
@@ -27,7 +30,7 @@ the entities that device needs. Login, the dashboard itself and all other traffi
 ## Features
 
 - 🖥️ **Visual add-on** in the sidebar – no YAML needed
-- ⚙️ **Dashboards, scope and users in the normal Configuration tab** (dedicated port or Home Assistant user); the web UI shows what was understood and focuses on filters
+- 🔘 **Pill buttons** in the web UI to pick the dashboards the panel opens, and whether to filter a dedicated port or a Home Assistant user
 - 📝 **Exclude list editor** in the UI: the file is created for you in the add-on's own folder, validated and backed up
 - 🔍 **Check an entity** to see why it passes or is blocked; clickable lists behind the dashboard/exclude counters
 - 🧭 Dashboard entities are protected, including wildcards, devices and areas the dashboard uses

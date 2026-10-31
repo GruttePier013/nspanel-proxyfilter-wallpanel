@@ -1,7 +1,7 @@
 name: "Proxyfilter for photo/wallpanel"
-version: "2.0.0"
+version: "2.0.3"
 slug: proxyfilter_wallpanel
-description: "Proxy filter that forwards only the traffic relevant to a wallpanel, photo frame or other small hardware device running the HA Companion app. It limits the CPU load on the device, which helps most on small CPUs such as Rockchip RK3326/RK3566, Allwinner A133, Amlogic S905 or MediaTek MT8163."
+description: "👉 Step 1: start the WEB-UI to complete the configuration (choose your dashboards). Proxy filter that forwards only the traffic relevant to a wallpanel, photo frame or other small hardware device running the HA Companion app. It limits the CPU load on the device, which helps most on small CPUs such as Rockchip RK3326/RK3566, Allwinner A133, Amlogic S905 or MediaTek MT8163."
 url: "https://github.com/YOUR-GITHUB-USER/proxyfilter-wallpanel-addon"
 arch:
   - aarch64
@@ -25,9 +25,6 @@ map:
   - homeassistant_config:ro
   - addon_config:rw
 options:
-  dashboards: []
-  scope: port
-  users: []
   upstream: "http://homeassistant:8123"
   mode: exclude
   exclude_file: "proxyfilter_exclude.txt"
@@ -39,11 +36,6 @@ options:
   min_per_hour: 120
   verbose: false
 schema:
-  dashboards:
-    - str
-  scope: list(port|users)
-  users:
-    - str
   upstream: url
   mode: list(include|exclude)
   local_only: bool

@@ -25,6 +25,7 @@ import hashlib
 import ipaddress
 import json
 import os
+import sys
 import re
 import shutil
 import signal
@@ -35,7 +36,7 @@ from urllib.parse import urlsplit
 import aiohttp
 from aiohttp import WSMsgType, web
 
-VERSION = "2.0.0"
+VERSION = "2.0.3"
 
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
        "te", "trailers", "transfer-encoding", "upgrade", "host"}
@@ -197,65 +198,6 @@ def discover_users(config_dir):
     return sorted(names, key=str.lower)
 
 
-DEFAULT_NAMES = {"default", "(default)", "overview", "lovelace"}
-
-
-def read_selection(path):
-    """dashboards / scope / users from the add-on configuration; None when unreadable."""
-    try:
-        with open(path, encoding="utf-8") as fh:
-            o = json.load(fh)
-    except (OSError, ValueError):
-        return None
-    if not isinstance(o, dict):
-        return None
-
-    def strs(v, n):
-        if not isinstance(v, list):
-            return []
-        return list(dict.fromkeys(str(x).strip()[:100] for x in v if isinstance(x, (str, int)) and str(x).strip()))[:n]
-    return {"dashboards": strs(o.get("dashboards"), 50), "users": strs(o.get("users"), 20),
-            "scope": o.get("scope") if o.get("scope") in ("port", "users") else "port"}
-
-
-def resolve_dashboard_names(names, found):
-    """Match what the user typed (URL name, title or id; case-insensitive) to dashboard keys.
-    Returns (keys, unknown_names)."""
-    keys, unknown = [], []
-    for n in names:
-        low = n.strip().casefold()
-        hit = None
-        for d in found:
-            cands = {d["key"].casefold(), str(d["url_path"]).casefold(), d["title"].casefold()}
-            if low in cands or (d["key"] == "lovelace" and low in DEFAULT_NAMES):
-                hit = d["key"]
-                break
-        if hit:
-            if hit not in keys:
-                keys.append(hit)
-        else:
-            unknown.append(n)
-    return keys, unknown
-
-
-def refresh_selection(app):
-    """Re-read dashboards/scope/users from the add-on configuration. Returns (dashboards_changed, connections_changed)."""
-    path = app["args"].options
-    sel = read_selection(path) if path else None
-    st = app["settings"].data
-    if sel is None:
-        sel = {"dashboards": app["selection"]["dashboards"], "users": st["users"], "scope": st["scope"]} \
-            if app.get("selection") else {"dashboards": [], "users": [], "scope": "port"}
-    keys, unknown = resolve_dashboard_names(sel["dashboards"], discover_dashboards(app["config_dir"]))
-    old = (list(st["dashboards"]), st["scope"], list(st["users"]), list(app.get("unknown_dash", [])))
-    app["selection"] = sel
-    st["dashboards"], st["scope"], st["users"] = keys, sel["scope"], sel["users"]
-    app["unknown_dash"] = unknown
-    app["users"] = effective_users(app)
-    new = (list(st["dashboards"]), st["scope"], list(st["users"]), unknown)
-    return new != old, (new[1], new[2]) != (old[1], old[2])
-
-
 def apply_timezone(config_dir):
     tz = ((read_json(os.path.join(config_dir, ".storage", "core.config")) or {}).get("data") or {}).get("time_zone")
     if tz:
@@ -267,12 +209,12 @@ def apply_timezone(config_dir):
 
 
 class Settings:
-    """Throttle settings (edited in the UI), kept in the add-on's private /data. The selected dashboards, users
-    and scope come from the add-on configuration (options.json) and live here only in memory."""
+    """UI-managed settings (selected dashboards, users, scope, throttles), kept in the add-on's private /data."""
 
     def __init__(self, path):
         self.path = path
         self.data = {"dashboards": [], "users": [], "scope": "port", "throttle": {}}
+        self.prev_version = None                  # version that wrote the file (None = first start)
         self.load()
 
     def load(self):
@@ -290,15 +232,21 @@ class Settings:
                 pass
             return
         raw = raw if isinstance(raw, dict) else {}
+        self.prev_version = str(raw.get("version"))[:20] if raw.get("version") else "older"
+        for k in ("dashboards", "users"):
+            v = raw.get(k)
+            self.data[k] = [str(x)[:100] for x in v][:50] if isinstance(v, list) else []
         thr = raw.get("throttle")
         if isinstance(thr, dict):
             self.data["throttle"] = {e: int(v) for e, v in thr.items()
                                      if isinstance(e, str) and ENTITY_ID_RE.match(e)
                                      and isinstance(v, int) and 1 <= v <= MAX_THROTTLE}
+        if raw.get("scope") in ("port", "users"):
+            self.data["scope"] = raw["scope"]
 
     def save(self):
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        atomic_write(self.path, json.dumps({"throttle": self.data["throttle"]}, indent=2))
+        atomic_write(self.path, json.dumps({"version": VERSION, **self.data}, indent=2))
 
 
 # ----------------------------------------------------------------------------- allow/deny
@@ -582,12 +530,7 @@ def compute_warnings(app):
     found = {d["key"]: d for d in discover_dashboards(app["config_dir"])}
     if not s["dashboards"] and not app["args"].dashboard:
         w.append(("warn", "No dashboard selected. Nothing is protected: entities on your wall panel dashboard can be "
-                          "blocked by the exclude list. Add the dashboard(s) your wall panel shows to \u201cdashboards\u201d "
-                          "in the add-on\u2019s Configuration tab."))
-    names = ", ".join(d["url_path"] for d in found.values() if d["url_path"] != "(default)") or "default"
-    for n in app.get("unknown_dash", []):
-        w.append(("warn", f"Dashboard \u201c{n}\u201d in the add-on configuration does not match any dashboard, so it "
-                          f"protects nothing. Use the URL name of the dashboard (available: {names}, or \u201cdefault\u201d)."))
+                          "blocked by the exclude list. Open the web UI and select the dashboard(s) your wall panel shows."))
     heavy = collections.Counter()
     for key in s["dashboards"]:
         d = found.get(key)
@@ -611,8 +554,7 @@ def compute_warnings(app):
                           f"folder, so nothing is excluded yet. Check the add-on log."))
     if s["scope"] == "users" and not s["users"] and not app["args"].user:
         w.append(("warn", "No user selected: EVERY connection (phones, browsers, ...) is filtered. "
-                          "Add the HA user the wall panel logs in with to \u201cusers\u201d in the add-on\u2019s Configuration tab, "
-                          "or set scope to \u201cport\u201d."))
+                          "Select the HA user the wall panel logs in with, or switch to \u201cdedicated port\u201d."))
     for u in (s["users"] if s["scope"] == "users" else []):
         if users and u.lower() not in {x.lower() for x in users}:
             w.append(("warn", f"Selected user “{u}” does not exist (renamed or deleted?). "
@@ -953,14 +895,7 @@ async def reloader(app, every):
     while True:
         await asyncio.sleep(every)
         try:
-            dash_changed, conn_changed = refresh_selection(app)
-            if dash_changed:
-                st = app["settings"].data
-                log(f"settings      configuration changed: dashboards = {st['dashboards'] or 'none'}, "
-                    f"scope = {st['scope']}, users = {st['users'] or 'none'}")
-            await apply_changes(app, close_all=conn_changed)
-            if dash_changed:
-                log_warnings(app)
+            await apply_changes(app)
         except Exception as exc:                          # noqa: BLE001 - never let the loop die
             warn(f"reload failed: {type(exc).__name__}: {exc}")
 
@@ -1075,7 +1010,6 @@ def build_state(app):
         "dashboards": [{k: d[k] for k in ("key", "title", "url_path", "exists")}
                        for d in discover_dashboards(app["config_dir"])],
         "users": discover_users(app["config_dir"]),
-        "unknown_dashboards": app.get("unknown_dash", []),
         "warnings": app["warnings"],
         "heavy": heavy,
         "busy": busy,
@@ -1128,6 +1062,45 @@ def make_ui(app):
         except ValueError:
             raise web.HTTPBadRequest(text="invalid JSON")
         return data
+
+    async def set_dashboards(request):
+        keys = (await body(request)).get("keys")
+        known = {d["key"] for d in discover_dashboards(app["config_dir"])}
+        if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
+            return web.json_response({"ok": False, "error": "keys must be a list"}, status=400)
+        keep = [k for k in app["settings"].data["dashboards"] if k not in known and k in keys]  # keep stale pills removable
+        keys = list(dict.fromkeys([k for k in keys if k in known] + keep))
+        app["settings"].data["dashboards"] = keys
+        app["settings"].save()
+        changed = await apply_changes(app)
+        log(f"settings      dashboards = {keys or 'none'}")
+        log_warnings(app)
+        return web.json_response({"ok": True, "changed": changed, "state": build_state(app)})
+
+    async def set_users(request):
+        names = (await body(request)).get("names")
+        if not isinstance(names, list) or not all(isinstance(k, str) for k in names):
+            return web.json_response({"ok": False, "error": "names must be a list"}, status=400)
+        names = list(dict.fromkeys(n.strip()[:100] for n in names if n.strip()))[:20]
+        app["settings"].data["users"] = names
+        app["settings"].save()
+        app["users"] = effective_users(app)
+        log(f"settings      selected users = {names or 'none'}")
+        log_warnings(app)
+        await apply_changes(app, close_all=True)          # everybody re-identifies
+        return web.json_response({"ok": True, "state": build_state(app)})
+
+    async def set_scope(request):
+        scope = (await body(request)).get("scope")
+        if scope not in ("port", "users"):
+            return web.json_response({"ok": False, "error": "scope must be port or users"}, status=400)
+        app["settings"].data["scope"] = scope
+        app["settings"].save()
+        app["users"] = effective_users(app)
+        log(f"settings      filter scope = {'everything on this port' if scope == 'port' else 'selected users'}")
+        log_warnings(app)
+        await apply_changes(app, close_all=True)
+        return web.json_response({"ok": True, "state": build_state(app)})
 
     async def set_throttle(request):
         b = await body(request)
@@ -1224,6 +1197,9 @@ def make_ui(app):
     ui.on_response_prepare.append(secure_headers)
     ui.router.add_get("/", index)
     ui.router.add_get("/api/state", state)
+    ui.router.add_post("/api/dashboards", set_dashboards)
+    ui.router.add_post("/api/users", set_users)
+    ui.router.add_post("/api/scope", set_scope)
     ui.router.add_post("/api/throttle", set_throttle)
     ui.router.add_get("/api/exclude", get_exclude)
     ui.router.add_post("/api/exclude", put_exclude)
@@ -1236,6 +1212,13 @@ def make_ui(app):
 # ----------------------------------------------------------------------------- app setup
 async def make_app(args):
     settings = Settings(os.path.join(args.data_dir, "settings.json"))
+    if settings.prev_version and settings.prev_version != VERSION:
+        log(f"update        updated from {settings.prev_version} to {VERSION}; your dashboards, scope, throttles "
+            f"and exclude file are kept")
+    try:
+        settings.save()                                   # records the running version
+    except OSError as exc:
+        warn(f"cannot write settings to {settings.path}: {exc}")
     exclude_path = args.exclude_file[0] if args.exclude_file else None
     ensure_exclude_file(exclude_path)
     up = urlsplit(args.upstream)
@@ -1251,7 +1234,7 @@ async def make_app(args):
     app["ui"] = {"in": 0, "out": 0, "secs": 0, "counts": collections.Counter()}
     app["seen"] = {"filtered": 0}
     app["clients"], app["filtered"] = set(), set()
-    app["unknown_dash"] = []
+    app["users"] = effective_users(app)
     app["user_cache"] = {}
     app["known"] = set()
     app["throttle"] = settings.data["throttle"]        # entity id -> minimum seconds between updates
@@ -1266,7 +1249,6 @@ async def make_app(args):
     app["rearm"] = {"v": False}
     app["counts"] = collections.Counter()
     app["warnings"] = []
-    refresh_selection(app)
     app["allow"] = Allow([], args.allow, args.mode, args.exclude, args.exclude_file, args.config_dir)
     app["allow"].set_dashboards(resolve_dashboards(app))
     app["session"] = aiohttp.ClientSession(auto_decompress=False,
@@ -1391,7 +1373,7 @@ async def start_servers(args):
 async def amain(args):
     global VERBOSE
     VERBOSE = args.verbose
-    runners, _ = await start_servers(args)
+    runners, papp = await start_servers(args)
     stop = asyncio.Event()
     loop = asyncio.get_running_loop()
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -1400,8 +1382,20 @@ async def amain(args):
         except NotImplementedError:
             pass
     await stop.wait()
+    log("stopping      closing connections")
+    # Close open panel connections first and never wait long: Supervisor kills the container after ~10 s,
+    # which Home Assistant reports as an add-on error.
+    for c in list(papp["clients"]):
+        try:
+            await asyncio.wait_for(c.close(code=1001, message=b"add-on stopping"), 1)
+        except Exception:                                  # noqa: BLE001
+            pass
     for r in runners:
-        await r.cleanup()
+        try:
+            await asyncio.wait_for(r.cleanup(), 3)
+        except Exception:                                  # noqa: BLE001
+            pass
+    log("stopped")
 
 
 def main():
@@ -1409,6 +1403,8 @@ def main():
         asyncio.run(amain(parse_args()))
     except KeyboardInterrupt:
         pass
+    sys.stdout.flush()
+    os._exit(0)                                           # clean exit code even if a stray task lingers
 
 
 if __name__ == "__main__":

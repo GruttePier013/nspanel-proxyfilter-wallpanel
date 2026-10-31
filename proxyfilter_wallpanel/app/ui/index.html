@@ -23,7 +23,6 @@ header p{margin:0;color:var(--mute)}
 .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:999px;padding:5px 12px;font:inherit;cursor:pointer}
 .pill.on{background:var(--accent);color:var(--accent-ink)}
 .pill.on .x{opacity:.8;font-weight:700}
-span.pill{cursor:default}
 .pill.add{background:transparent;border:1px dashed var(--accent);color:var(--pill-ink)}
 .pill.add:hover{background:var(--pill)}
 .pill.bad{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
@@ -75,16 +74,25 @@ details summary{cursor:pointer;color:var(--mute)}
 <div id="warnings"></div>
 
 <section class="card">
-  <h2><span class="step">1</span>Your configuration <small style="font-weight:400;color:var(--mute)">(change it in the add-on&rsquo;s <b>Configuration</b> tab)</small></h2>
-  <p class="sub"><b>Dashboards</b> the wall panel opens: every entity used on them is always sent to the panel, so they can never break.</p>
+  <h2><span class="step">1</span>Dashboards the wall panel opens</h2>
+  <p class="sub">Every entity used on these dashboards is always sent to the panel, so they can never break. Click a dashed pill to add it.</p>
   <div class="pills" id="dash-on"></div>
-  <p class="sub" id="dash-avail"></p>
-  <p class="sub"><b>Scope</b>: <span id="scope-help"></span></p>
-  <div id="users-box"><div class="pills" id="user-on"></div></div>
+  <div class="pills" id="dash-add"></div>
 </section>
 
 <section class="card">
-  <h2><span class="step">2</span>Point the panel to the filter</h2>
+  <h2><span class="step">2</span>Which connections are filtered?</h2>
+  <p class="sub">Choose how the add-on recognises the wall panel.</p>
+  <div class="pills" id="scope"></div>
+  <p class="sub" id="scope-help"></p>
+  <div id="users-box">
+    <div class="pills" id="user-on"></div>
+    <div class="pills" id="user-add"></div>
+  </div>
+</section>
+
+<section class="card">
+  <h2><span class="step">3</span>Point the panel to the filter</h2>
   <p class="sub">In the Companion app of the wall panel set the server URL to: <code id="panel-url">http://&lt;home-assistant-ip&gt;:8124</code> and log in (as the selected user, if you chose that option).</p>
   <div class="grid" id="stats"></div>
   <div id="stat-detail" class="detail" hidden></div>
@@ -92,7 +100,7 @@ details summary{cursor:pointer;color:var(--mute)}
 </section>
 
 <section class="card">
-  <h2><span class="step">3</span>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
+  <h2><span class="step">4</span>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
   <p class="sub">One pattern per line (<code>sensor.example_*</code>). The file lives in this add-on's own config folder and is created for you; saving keeps a <code>.bak</code> copy. You can paste log lines; the entity is extracted. <b>Entities used on your selected dashboards are never blocked</b> &ndash; even when a pattern matches them.</p>
   <textarea id="ed" spellcheck="false" aria-label="Exclude file"></textarea>
   <div class="row"><button class="btn" id="save">Save</button><button class="btn sec" id="reload">Discard changes</button><span class="msg" id="save-msg"></span></div>
@@ -131,6 +139,27 @@ const api=(p,o)=>fetch("api/"+p,o).then(async r=>{const j=await r.json().catch((
 const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 
+function pills(onBox,addBox,selected,available,label,onChange,emptyText){
+  onBox.replaceChildren();addBox.replaceChildren();
+  if(!selected.length)onBox.append(el("span","empty",emptyText));
+  for(const key of selected){
+    const a=available.find(x=>x.key===key);
+    const p=el("button","pill on"+(a&&a.ok===false?" bad":""));p.type="button";
+    p.append(el("span",null,a?a.title:key));
+    if(a&&a.note)p.append(el("small",null,a.note));
+    if(!a)p.append(el("small",null,"missing"));
+    p.append(el("span","x","\u00d7"));p.title="Remove";
+    p.onclick=()=>onChange(selected.filter(k=>k!==key));onBox.append(p);
+  }
+  for(const a of available.filter(x=>!selected.includes(x.key))){
+    const p=el("button","pill add","+ "+a.title);p.type="button";
+    if(a.note)p.append(el("small",null," "+a.note));
+    p.onclick=()=>onChange([...selected,a.key]);addBox.append(p);
+  }
+}
+async function setDash(keys){const r=await post("dashboards",{keys});if(r.ok){S=r.state;render()}else toast(r.error)}
+async function setScope(scope){const r=await post("scope",{scope});if(r.ok){S=r.state;render()}else toast(r.error)}
+async function setUsers(names){const r=await post("users",{names});if(r.ok){S=r.state;render()}else toast(r.error)}
 async function setThrottle(entity,seconds){const r=await post("throttle",{entity,seconds});if(r.ok){S=r.state;render()}else toast(r.error)}
 function toast(t){msg(t,"err")}
 
@@ -145,19 +174,16 @@ function render(){
   for(const t of s.throttled){const d=el("div","warn ok");d.append(el("b",null,"\u23f1 Throttled: "),document.createTextNode(t.entity+" \u2013 at most 1 update per "+t.seconds+" s (HA sends "+t.rate+"/min). "));
     const p=el("button","pill add mini","remove");p.type="button";p.onclick=()=>setThrottle(t.entity,0);d.append(p);w.append(d)}
   if(!s.warnings.length&&!s.heavy.length){const d=el("div","warn ok","✓ Setup looks good.");w.append(d)}
-  const dOn=$("dash-on");dOn.replaceChildren();
-  for(const k of s.settings.dashboards){const d=s.dashboards.find(x=>x.key===k);
-    const p=el("span","pill on"+(d&&!d.exists?" bad":""),d?d.title:k);if(d&&!d.exists)p.append(el("small",null,"not saved yet"));dOn.append(p)}
-  for(const n of s.unknown_dashboards){const p=el("span","pill bad",n);p.append(el("small",null,"unknown"));dOn.append(p)}
-  if(!dOn.children.length)dOn.append(el("span","empty","No dashboard configured yet"));
-  $("dash-avail").textContent="Names you can use in the configuration: "+s.dashboards.map(d=>d.url_path==="(default)"?"default":d.url_path).join(", ")+".";
+  pills($("dash-on"),$("dash-add"),s.settings.dashboards,
+    s.dashboards.map(d=>({key:d.key,title:d.title,ok:d.exists,note:d.exists?"":"not saved yet"})),"dashboard",setDash,"No dashboard selected yet");
+  const sc=$("scope");sc.replaceChildren();
+  for(const [k,t] of [["port","Dedicated port (recommended)"],["users","By Home Assistant user"]]){
+    const p=el("button","pill "+(s.settings.scope===k?"on":"add"),t);p.type="button";p.onclick=()=>setScope(k);sc.append(p)}
   $("scope-help").textContent=s.settings.scope==="port"
-    ?"dedicated port. Everything that connects to port "+s.panel_port+" is filtered; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved, which makes this the simplest and safest option. Firewall this port to the panel's IP address if you can."
-    :"by Home Assistant user. Only connections that log in as these users are filtered, so one port can serve everybody. Create a dedicated user for the panel (Settings \u2192 People).";
+    ?"Everything that connects to port "+s.panel_port+" is filtered. Only the wall panel uses this port; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved, which makes this the simplest and safest option. Firewall this port to the panel's IP address if you can."
+    :"Only connections that log in as the selected users are filtered, so one port can serve everybody. Create a dedicated user for the panel (Settings \u2192 People).";
   $("users-box").hidden=s.settings.scope!=="users";
-  const uo=$("user-on");uo.replaceChildren();
-  for(const u of s.settings.users)uo.append(el("span","pill on",u));
-  if(!s.settings.users.length)uo.append(el("span","empty","No user configured \u2013 every connection is filtered"));
+  pills($("user-on"),$("user-add"),s.settings.users,s.users.map(u=>({key:u,title:u})),"user",setUsers,"Nobody selected \u2013 every connection is filtered");
   const st=s.status,box=$("stats");box.replaceChildren();
   const add=(v,l,fn,key)=>{const d=el(fn?"button":"div","stat"+(fn&&OPEN===key?" open":""));if(fn){d.type="button";d.onclick=fn;d.title="Click to show the list"}d.append(el("b",null,v),el("span",null,l));box.append(d)};
   add(st.filtered+" / "+st.clients,"filtered / open connections");
