@@ -23,6 +23,7 @@ header p{margin:0;color:var(--mute)}
 .pill{display:inline-flex;align-items:center;gap:6px;border:1px solid transparent;border-radius:999px;padding:5px 12px;font:inherit;cursor:pointer}
 .pill.on{background:var(--accent);color:var(--accent-ink)}
 .pill.on .x{opacity:.8;font-weight:700}
+span.pill{cursor:default}
 .pill.add{background:transparent;border:1px dashed var(--accent);color:var(--pill-ink)}
 .pill.add:hover{background:var(--pill)}
 .pill.bad{background:var(--warn-bg);color:var(--warn);border-color:var(--warn)}
@@ -34,6 +35,14 @@ header p{margin:0;color:var(--mute)}
 .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
 .stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .stat b{display:block;font-size:22px}.stat span{color:var(--mute);font-size:12.5px}
+button.stat{background:var(--card);color:inherit;font:inherit;text-align:left;cursor:pointer}
+button.stat:hover,button.stat.open{border-color:var(--accent)}
+button.stat span::after{content:" \25be";color:var(--accent)}button.stat.open span::after{content:" \25b4"}
+.detail{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin-top:10px}
+.detail .list{max-height:320px;overflow:auto;margin-top:6px}
+.detail input{background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font:13px ui-monospace,Menlo,Consolas,monospace;min-width:200px}
+.tag{font-size:11.5px;border-radius:999px;padding:0 8px;background:var(--pill);color:var(--pill-ink);margin-left:6px}.tag.w{background:var(--warn-bg);color:var(--warn)}
+select{background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:4px 8px;font:inherit}
 textarea{width:100%;min-height:240px;background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:10px;
 padding:12px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;resize:vertical}
 button.btn{background:var(--accent);color:var(--accent-ink);border:0;border-radius:9px;padding:8px 16px;font:inherit;font-weight:600;cursor:pointer}
@@ -66,40 +75,41 @@ details summary{cursor:pointer;color:var(--mute)}
 <div id="warnings"></div>
 
 <section class="card">
-  <h2><span class="step">1</span>Dashboards the wall panel opens</h2>
-  <p class="sub">Every entity used on these dashboards is always sent to the panel, so they can never break. Click a dashed pill to add it.</p>
+  <h2><span class="step">1</span>Your configuration <small style="font-weight:400;color:var(--mute)">(change it in the add-on&rsquo;s <b>Configuration</b> tab)</small></h2>
+  <p class="sub"><b>Dashboards</b> the wall panel opens: every entity used on them is always sent to the panel, so they can never break.</p>
   <div class="pills" id="dash-on"></div>
-  <div class="pills" id="dash-add"></div>
+  <p class="sub" id="dash-avail"></p>
+  <p class="sub"><b>Scope</b>: <span id="scope-help"></span></p>
+  <div id="users-box"><div class="pills" id="user-on"></div></div>
 </section>
 
 <section class="card">
-  <h2><span class="step">2</span>Which connections are filtered?</h2>
-  <p class="sub">Choose how the add-on recognises the wall panel.</p>
-  <div class="pills" id="scope"></div>
-  <p class="sub" id="scope-help"></p>
-  <div id="users-box">
-    <div class="pills" id="user-on"></div>
-    <div class="pills" id="user-add"></div>
-  </div>
-</section>
-
-<section class="card">
-  <h2><span class="step">3</span>Point the panel to the filter</h2>
+  <h2><span class="step">2</span>Point the panel to the filter</h2>
   <p class="sub">In the Companion app of the wall panel set the server URL to: <code id="panel-url">http://&lt;home-assistant-ip&gt;:8124</code> and log in (as the selected user, if you chose that option).</p>
   <div class="grid" id="stats"></div>
+  <div id="stat-detail" class="detail" hidden></div>
   <div id="status-line" class="msg" style="margin-top:10px"></div>
 </section>
 
 <section class="card">
-  <h2><span class="step">4</span>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
-  <p class="sub">The add-on only <b>reads</b> this file &ndash; it has no permission to change anything in your Home Assistant folder. You create and edit the file yourself in this add-on's own config folder (<code>addon_configs</code> in Samba or the File editor add-on); changes are picked up within 30 seconds. Entities on your dashboards are never blocked.</p>
-  <div id="file-status"></div>
-  <details open><summary>Current file (read-only)</summary><textarea id="cur" readonly spellcheck="false" aria-label="Current exclude file"></textarea></details>
-  <h2 style="margin-top:14px;font-size:15px">New lines to add</h2>
-  <p class="sub">Click <b>exclude</b> in the list below, or paste log lines / patterns here (one per line, <code>sensor.example_*</code>). Then copy them into the file.</p>
-  <textarea id="ed" spellcheck="false" aria-label="Lines to add" style="min-height:110px"></textarea>
-  <div class="row"><button class="btn" id="copy-new">Copy new lines</button><button class="btn sec" id="copy-all">Copy complete file</button><button class="btn sec" id="clear">Clear</button><span class="msg" id="save-msg"></span></div>
+  <h2><span class="step">3</span>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
+  <p class="sub">One pattern per line (<code>sensor.example_*</code>). The file lives in this add-on's own config folder and is created for you; saving keeps a <code>.bak</code> copy. You can paste log lines; the entity is extracted. <b>Entities used on your selected dashboards are never blocked</b> &ndash; even when a pattern matches them.</p>
+  <textarea id="ed" spellcheck="false" aria-label="Exclude file"></textarea>
+  <div class="row"><button class="btn" id="save">Save</button><button class="btn sec" id="reload">Discard changes</button><span class="msg" id="save-msg"></span></div>
   <div id="save-warn"></div>
+  <div id="overlaps"></div>
+  <h2 style="margin-top:16px;font-size:15px">Check an entity</h2>
+  <p class="sub">Not sure why an entity does or does not reach the panel? Type its id.</p>
+  <div class="row" style="margin-top:0"><input id="chk" placeholder="sensor.example_air_mini_pm25" spellcheck="false" style="flex:1;min-width:220px;background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:13px ui-monospace,Menlo,Consolas,monospace"><button class="btn sec" id="chk-go">Check</button></div>
+  <div id="chk-out"></div>
+</section>
+
+<section class="card">
+  <h2>Throttling</h2>
+  <p class="sub">Entities on the dashboard always reach the panel, even when they update every second. Slow a busy one down here: updates in between are held back and merged, and the latest value is always delivered.</p>
+  <table><thead><tr><th>Entity</th><th class="n">per min from HA</th><th>Throttle</th></tr></thead><tbody id="thr-rows"></tbody></table>
+  <p class="empty" id="thr-empty" hidden>No busy entities measured yet &ndash; connect the panel and give it a few minutes, or add an entity below.</p>
+  <div class="row"><input id="thr-entity" placeholder="sensor.example_power" spellcheck="false" style="flex:1;min-width:200px;background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:13px ui-monospace,Menlo,Consolas,monospace"><select id="thr-sec"></select><button class="btn sec" id="thr-add">Add throttle</button><span class="msg" id="thr-msg"></span></div>
 </section>
 
 <section class="card">
@@ -121,28 +131,7 @@ const api=(p,o)=>fetch("api/"+p,o).then(async r=>{const j=await r.json().catch((
 const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
 
-function pills(onBox,addBox,selected,available,label,onChange,emptyText){
-  onBox.replaceChildren();addBox.replaceChildren();
-  if(!selected.length)onBox.append(el("span","empty",emptyText));
-  for(const key of selected){
-    const a=available.find(x=>x.key===key);
-    const p=el("button","pill on"+(a&&a.ok===false?" bad":""));p.type="button";
-    p.append(el("span",null,a?a.title:key));
-    if(a&&a.note)p.append(el("small",null,a.note));
-    if(!a)p.append(el("small",null,"missing"));
-    p.append(el("span","x","×"));p.title="Remove";
-    p.onclick=()=>onChange(selected.filter(k=>k!==key));onBox.append(p);
-  }
-  for(const a of available.filter(x=>!selected.includes(x.key))){
-    const p=el("button","pill add","+ "+a.title);p.type="button";
-    if(a.note)p.append(el("small",null," "+a.note));
-    p.onclick=()=>onChange([...selected,a.key]);addBox.append(p);
-  }
-}
-async function setDash(keys){const r=await post("dashboards",{keys});if(r.ok){S=r.state;render()}else toast(r.error)}
 async function setThrottle(entity,seconds){const r=await post("throttle",{entity,seconds});if(r.ok){S=r.state;render()}else toast(r.error)}
-async function setScope(scope){const r=await post("scope",{scope});if(r.ok){S=r.state;render()}else toast(r.error)}
-async function setUsers(names){const r=await post("users",{names});if(r.ok){S=r.state;render()}else toast(r.error)}
 function toast(t){msg(t,"err")}
 
 function render(){
@@ -156,24 +145,27 @@ function render(){
   for(const t of s.throttled){const d=el("div","warn ok");d.append(el("b",null,"\u23f1 Throttled: "),document.createTextNode(t.entity+" \u2013 at most 1 update per "+t.seconds+" s (HA sends "+t.rate+"/min). "));
     const p=el("button","pill add mini","remove");p.type="button";p.onclick=()=>setThrottle(t.entity,0);d.append(p);w.append(d)}
   if(!s.warnings.length&&!s.heavy.length){const d=el("div","warn ok","✓ Setup looks good.");w.append(d)}
-  pills($("dash-on"),$("dash-add"),s.settings.dashboards,
-    s.dashboards.map(d=>({key:d.key,title:d.title,ok:d.exists,note:d.exists?"":"not saved yet"})),"dashboard",setDash,"No dashboard selected yet");
-  const sc=$("scope");sc.replaceChildren();
-  for(const [k,t] of [["port","Dedicated port (recommended)"],["users","By Home Assistant user"]]){
-    const p=el("button","pill "+(s.settings.scope===k?"on":"add"),t);p.type="button";p.onclick=()=>setScope(k);sc.append(p)}
+  const dOn=$("dash-on");dOn.replaceChildren();
+  for(const k of s.settings.dashboards){const d=s.dashboards.find(x=>x.key===k);
+    const p=el("span","pill on"+(d&&!d.exists?" bad":""),d?d.title:k);if(d&&!d.exists)p.append(el("small",null,"not saved yet"));dOn.append(p)}
+  for(const n of s.unknown_dashboards){const p=el("span","pill bad",n);p.append(el("small",null,"unknown"));dOn.append(p)}
+  if(!dOn.children.length)dOn.append(el("span","empty","No dashboard configured yet"));
+  $("dash-avail").textContent="Names you can use in the configuration: "+s.dashboards.map(d=>d.url_path==="(default)"?"default":d.url_path).join(", ")+".";
   $("scope-help").textContent=s.settings.scope==="port"
-    ?"Everything that connects to port "+s.panel_port+" is filtered. Only the wall panel uses this port; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved, which makes this the simplest and safest option. Firewall this port to the panel's IP address if you can."
-    :"Only connections that log in as the selected users are filtered, so one port can serve everybody. Create a dedicated user for the panel (Settings \u2192 People).";
+    ?"dedicated port. Everything that connects to port "+s.panel_port+" is filtered; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved, which makes this the simplest and safest option. Firewall this port to the panel's IP address if you can."
+    :"by Home Assistant user. Only connections that log in as these users are filtered, so one port can serve everybody. Create a dedicated user for the panel (Settings \u2192 People).";
   $("users-box").hidden=s.settings.scope!=="users";
-  pills($("user-on"),$("user-add"),s.settings.users,s.users.map(u=>({key:u,title:u})),"user",setUsers,"Nobody selected \u2013 every connection is filtered");
+  const uo=$("user-on");uo.replaceChildren();
+  for(const u of s.settings.users)uo.append(el("span","pill on",u));
+  if(!s.settings.users.length)uo.append(el("span","empty","No user configured \u2013 every connection is filtered"));
   const st=s.status,box=$("stats");box.replaceChildren();
-  const add=(v,l)=>{const d=el("div","stat");d.append(el("b",null,v),el("span",null,l));box.append(d)};
+  const add=(v,l,fn,key)=>{const d=el(fn?"button":"div","stat"+(fn&&OPEN===key?" open":""));if(fn){d.type="button";d.onclick=fn;d.title="Click to show the list"}d.append(el("b",null,v),el("span",null,l));box.append(d)};
   add(st.filtered+" / "+st.clients,"filtered / open connections");
   add(st.in_per_min,"updates per min from HA");
   add(st.out_per_min,"updates per min to panel");
   add(st.in_per_min?Math.round(100*(1-st.out_per_min/st.in_per_min))+"%":"–","traffic removed");
-  add(st.dashboard_entities,"dashboard entities");
-  add(st.exclude_patterns,"exclude patterns");
+  add(st.dashboard_entities,"dashboard entities",()=>toggleList("dashboard"),"dashboard");
+  add(st.exclude_patterns,"exclude patterns",()=>toggleList("exclude"),"exclude");
   const sl=$("status-line");sl.replaceChildren();
   const on=st.filtered>0;
   const dot=el("span","dot"+(on?" on":""));sl.append(dot,document.createTextNode(on?"A panel is connected and filtered.":
@@ -186,40 +178,74 @@ function render(){
   for(const c of s.candidates){const tr=el("tr");const td=el("td");td.append(el("code",null,c.entity));
     const n=el("td","n",c.rate.toFixed(1));const b=el("td");const btn=el("button","pill add mini","exclude");btn.type="button";btn.onclick=()=>addLine(c.entity);b.append(btn);tr.append(td,n,b);tb.append(tr)}
   $("cand-empty").hidden=s.candidates.length>0;
+  renderThrottle(s);
 }
+const THR_OPTS=[[0,"off"],[2,"max 1 per 2 s"],[5,"max 1 per 5 s"],[10,"max 1 per 10 s"],[30,"max 1 per 30 s"],[60,"max 1 per minute"],[300,"max 1 per 5 min"]];
+function thrSelect(value,onchange){const sel=document.createElement("select");const opts=THR_OPTS.slice();
+  if(!opts.some(o=>o[0]===value))opts.push([value,"max 1 per "+value+" s"]);
+  for(const [v,t] of opts){const o=document.createElement("option");o.value=v;o.textContent=t;if(v===value)o.selected=true;sel.append(o)}
+  sel.onchange=()=>onchange(parseInt(sel.value,10));return sel}
+function renderThrottle(s){
+  const tb=$("thr-rows");tb.replaceChildren();const seen=new Set();const rows=[];
+  for(const t of s.throttled){rows.push({entity:t.entity,rate:t.rate,seconds:t.seconds,protected:null});seen.add(t.entity)}
+  for(const b of s.busy){if(!seen.has(b.entity)){rows.push(b);seen.add(b.entity)}}
+  for(const r of rows){const tr=el("tr");const td=el("td");td.append(el("code",null,r.entity));if(r.protected)td.append(el("span","tag","dashboard"));
+    const sel=thrSelect(r.seconds||0,v=>setThrottle(r.entity,v));const tdSel=el("td");tdSel.append(sel);
+    tr.append(td,el("td","n",r.rate?r.rate:"\u2013"),tdSel);tb.append(tr)}
+  $("thr-empty").hidden=rows.length>0;
+  const add=$("thr-sec");if(!add.options.length){for(const [v,t] of THR_OPTS.slice(1)){const o=document.createElement("option");o.value=v;o.textContent=t;add.append(o)}add.value="5"}}
+$("thr-add").onclick=async()=>{const e=$("thr-entity").value.trim().toLowerCase();const m=$("thr-msg");m.className="msg";m.textContent="";
+  if(!e){return}const r=await post("throttle",{entity:e,seconds:parseInt($("thr-sec").value,10)});
+  if(r.ok){S=r.state;$("thr-entity").value="";m.className="msg good";m.textContent="Throttle set for "+e+".";render()}else{m.className="msg err";m.textContent=r.error||"failed"}};
 function addLine(pat){const t=$("ed");if(t.value.split("\n").some(l=>l.split("#")[0].trim()===pat))return;
-  t.value=t.value.replace(/\n*$/,"\n").replace(/^\n/,"")+pat+"\n";t.scrollTop=t.scrollHeight;
-  msg("Added "+pat+" \u2013 copy the new lines into the file.","")}
+  t.value=t.value.replace(/\n*$/,"\n")+pat+"\n";markDirty(true);t.scrollTop=t.scrollHeight;
+  msg("Added "+pat+" \u2013 press Save to apply.","")}
+let OPEN=null,LIST=null;
+async function toggleList(kind){OPEN=OPEN===kind?null:kind;LIST=null;if(OPEN)await loadList();renderList();if(S)render()}
+async function loadList(){const r=await api("list?kind="+OPEN);LIST=r.ok?r:null}
+function renderList(){const box=$("stat-detail");box.replaceChildren();box.hidden=!OPEN;if(!OPEN)return;
+  if(!LIST){box.append(el("p","empty","Loading\u2026"));return}
+  const dash=OPEN==="dashboard";
+  const head=el("div","row");head.style.marginTop="0";
+  const h=el("b",null,dash?"Entities that always reach the panel":"Exclude patterns");
+  const inp=document.createElement("input");inp.placeholder="filter\u2026";inp.spellcheck=false;
+  const ref=el("button","btn sec mini","Refresh");ref.type="button";ref.onclick=async()=>{await loadList();renderList()};
+  const cl=el("button","btn sec mini","Close");cl.type="button";cl.onclick=()=>toggleList(OPEN);
+  head.append(h,inp,ref,cl);box.append(head);
+  const sub=el("p","sub");sub.style.margin="6px 0 0";
+  sub.textContent=dash?(LIST.items.length+" found in the selected dashboards"+(LIST.known_count!=null?", "+LIST.known_count+" of them exist in Home Assistant":"")+(LIST.wildcards.length?"; wildcards: "+LIST.wildcards.join(", "):"")+"."):(LIST.items.length+" patterns from the exclude file.");
+  box.append(sub);
+  const list=el("div","list");box.append(list);
+  const draw=()=>{list.replaceChildren();const q=inp.value.trim().toLowerCase();const tb=el("table");
+    for(const it of LIST.items){const name=dash?it.entity:it.pattern;if(q&&!name.toLowerCase().includes(q)&&!(it.reason||"").toLowerCase().includes(q))continue;
+      const tr=el("tr");const td=el("td");td.append(el("code",null,name));
+      if(dash){if(it.known===false)td.append(el("span","tag w","not a known entity"));td.append(el("span","tag",it.reason))}
+      else td.append(el("span","tag",it.seen+" entit"+(it.seen===1?"y":"ies")+" seen"));
+      tr.append(td,el("td","n",it.rate?it.rate+"/min":""));tb.append(tr)}
+    list.append(tb)};
+  inp.oninput=draw;draw()}
 function msg(t,cls){const m=$("save-msg");m.className="msg "+cls;m.textContent=t}
-let CUR=null;
-async function loadFile(){
-  const r=await api("exclude");const box=$("file-status");box.replaceChildren();
-  if(!r.ok){box.append(el("div","warn",r.error||"cannot read exclude file"));return}
-  CUR=r;$("cur").value=r.exists?r.text:"(the file does not exist yet)";
-  if(!r.exists){const d=el("div","warn");d.append(el("b",null,"\u26a0 "),document.createTextNode("The file does not exist yet, so nothing is excluded. Create it in the add-on's config folder (addon_configs, via Samba or File editor) and paste the template with \u201cCopy complete file\u201d."));box.append(d)}
-  for(const e of r.errors||[]){const d=el("div","warn");d.append(el("b",null,"\u26a0 In the file: "),document.createTextNode(e));box.append(d)}
-}
-async function prepared(){
-  const sw=$("save-warn");sw.replaceChildren();
-  const r=await post("exclude/normalize",{text:$("ed").value});
-  if(!r.ok){msg("Cannot copy:","err");for(const x of r.errors||[]){sw.append(el("div","warn",x))}return null}
-  for(const x of r.warnings||[]){const d=el("div","warn");d.append(el("b",null,"\u26a0 "),document.createTextNode(x));sw.append(d)}
-  $("ed").value=r.text.trim()?r.text:"";return r.text.trim()?r.text:"";
-}
-async function copyText(text,okmsg){
-  try{await navigator.clipboard.writeText(text);msg(okmsg,"good");return}catch(e){}
-  const t=document.createElement("textarea");t.value=text;document.body.append(t);t.select();
-  let ok=false;try{ok=document.execCommand("copy")}catch(e){}t.remove();
-  msg(ok?okmsg:"Copy was blocked by the browser \u2013 select the text in the box and press Ctrl+C.",ok?"good":"err");
-}
-$("copy-new").onclick=async()=>{const t=await prepared();if(t===null)return;if(!t){msg("Nothing to copy yet.","");return}
-  await copyText(t,"Copied. Paste it at the end of "+(S.exclude.name||"the file")+".")};
-$("copy-all").onclick=async()=>{const t=await prepared();if(t===null)return;if(!CUR)await loadFile();
-  const base=CUR&&CUR.exists?CUR.text.replace(/\n*$/,"\n"):(CUR?CUR.template:"");
-  await copyText(base+(t?"\n"+t:""),"Copied the complete file"+(CUR&&CUR.exists?"":" (with template)")+".")};
-$("clear").onclick=()=>{$("ed").value="";$("save-warn").replaceChildren();msg("","")};
+function markDirty(v){dirty=v;$("save").disabled=!v;$("reload").disabled=!v}
+function showOverlaps(list){const box=$("overlaps");box.replaceChildren();
+  for(const o of list||[]){const d=el("div","warn ok");d.append(el("b",null,"\u2139 "),document.createTextNode(o.pattern+" also matches "+o.count+" entit"+(o.count===1?"y":"ies")+" on your dashboard(s) \u2013 these stay visible: "+o.examples.join(", ")+(o.count>o.examples.length?", \u2026":"")));box.append(d)}}
+async function loadEditor(){const r=await api("exclude");if(r.ok){$("ed").value=r.text;markDirty(false);msg("","");showOverlaps(r.overlaps)}else{$("ed").disabled=true;msg(r.error||"cannot load the exclude file","err")}}
+$("ed").addEventListener("input",()=>markDirty(true));
+$("reload").onclick=loadEditor;
+$("save").onclick=async()=>{
+  const sw=$("save-warn");sw.replaceChildren();msg("Saving\u2026","");$("save").disabled=true;
+  const r=await post("exclude",{text:$("ed").value});
+  if(r.ok){$("ed").value=r.text;markDirty(false);
+    msg("Saved \u2013 "+r.patterns+" patterns active"+(r.converted?", "+r.converted+" pasted line(s) converted":"")+(r.backup?"; backup "+r.backup:"")+".","good");
+    for(const x of r.warnings||[]){const d=el("div","warn");d.append(el("b",null,"\u26a0 "),document.createTextNode(x));sw.append(d)}
+    showOverlaps(r.overlaps);refresh();
+  }else{markDirty(true);msg(r.errors?"Not saved:":(r.error||"Not saved"),"err");for(const x of r.errors||[]){sw.append(el("div","warn",x))}}
+};
+async function check(){const v=$("chk").value.trim();const out=$("chk-out");out.replaceChildren();if(!v)return;
+  const r=await api("explain?entity="+encodeURIComponent(v));
+  const d=el("div","warn"+(r.ok&&r.passes?" ok":""),r.ok?(r.entity+" \u2192 "+r.reason):(r.error||"error"));out.append(d)}
+$("chk-go").onclick=check;$("chk").addEventListener("keydown",e=>{if(e.key==="Enter")check()});
 async function refresh(){const r=await api("state");if(r.version){S=r;render()}}
-(async()=>{await refresh();await loadFile();setInterval(refresh,5000);setInterval(loadFile,30000)})();
+(async()=>{await refresh();await loadEditor();setInterval(refresh,5000)})();
 </script>
 </body>
 </html>

@@ -1,4 +1,13 @@
 configuration:
+  dashboards:
+    name: Dashboards the wall panel opens
+    description: "URL names of the dashboards your wall panel shows (the part after the / in the address, e.g. wallpanel; use default for the default dashboard). Every entity used on them is always sent to the panel. Open the add-on's web UI to see the names you can use."
+  scope:
+    name: Which connections are filtered
+    description: "port (recommended): everything that connects to the add-on's port 8124 is filtered, only the wall panel should use it. users: only the Home Assistant users listed below are filtered."
+  users:
+    name: Users to filter (only for scope = users)
+    description: "Name of the Home Assistant user the wall panel logs in with. Ignored when scope is port."
   upstream:
     name: Home Assistant URL
     description: "Address of Home Assistant as seen from this add-on. Leave the default unless you changed it."
@@ -7,7 +16,7 @@ configuration:
     description: "exclude: everything is sent to the panel except what is in the exclude file (recommended, new entities keep working). include: ONLY entities on the selected dashboards are sent."
   exclude_file:
     name: Exclude file (in the add-on config folder)
-    description: "File you create yourself in this add-on's own config folder (shown as addon_configs in Samba / File editor); the add-on only reads it. Change its name/location here, e.g. packages/proxyfilter_exclude.txt. Must end in .txt or .list."
+    description: "File in this add-on's own config folder (shown as addon_configs in Samba / File editor). Created automatically and editable in the add-on's web UI. Change its name/location here, e.g. packages/proxyfilter_exclude.txt. Must end in .txt or .list."
   local_only:
     name: Local network only
     description: "Refuse connections from public IP addresses (recommended). Turn off only if the panel connects from outside your network, and then use HTTPS in front."

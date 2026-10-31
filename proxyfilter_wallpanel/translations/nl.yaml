@@ -1,4 +1,13 @@
 configuration:
+  dashboards:
+    name: Dashboards die het wandpaneel opent
+    description: "URL-namen van de dashboards die je wandpaneel toont (het deel achter de / in het adres, bijv. wallpanel; gebruik default voor het standaarddashboard). Elke entity die erop staat gaat altijd naar het paneel. Open de web-UI van de add-on om te zien welke namen je kunt gebruiken."
+  scope:
+    name: Welke verbindingen worden gefilterd
+    description: "port (aanbevolen): alles wat verbindt met poort 8124 van de add-on wordt gefilterd, alleen het wandpaneel hoort die te gebruiken. users: alleen de hieronder genoemde Home Assistant-gebruikers worden gefilterd."
+  users:
+    name: Te filteren gebruikers (alleen bij scope = users)
+    description: "Naam van de Home Assistant-gebruiker waarmee het wandpaneel inlogt. Wordt genegeerd bij scope port."
   upstream:
     name: Home Assistant URL
     description: "Adres van Home Assistant zoals deze add-on het ziet. Laat staan tenzij je het hebt aangepast."
@@ -7,7 +16,7 @@ configuration:
     description: "exclude: alles gaat naar het paneel behalve wat in het exclude-bestand staat (aanbevolen, nieuwe entities blijven werken). include: ALLEEN entities van de gekozen dashboards gaan door."
   exclude_file:
     name: Exclude-bestand (in de add-on-configmap)
-    description: "Bestand dat je zelf aanmaakt in de eigen configmap van deze add-on (zichtbaar als addon_configs in Samba / File editor); de add-on leest het alleen. Wijzig hier naam/locatie, bijv. packages/proxyfilter_exclude.txt. Moet op .txt of .list eindigen."
+    description: "Bestand in de eigen configmap van deze add-on (zichtbaar als addon_configs in Samba / File editor). Wordt automatisch aangemaakt en is aanpasbaar in de web-UI van de add-on. Wijzig hier naam/locatie, bijv. packages/proxyfilter_exclude.txt. Moet op .txt of .list eindigen."
   local_only:
     name: Alleen lokaal netwerk
     description: "Weiger verbindingen vanaf publieke IP-adressen (aanbevolen). Alleen uitzetten als het paneel van buiten je netwerk verbindt, en zet er dan HTTPS voor."

@@ -56,11 +56,12 @@ WS_CLIENT_MAX = 16 * 1024 * 1024        # largest message a client may send us (
 
 EXCLUDE_TEMPLATE = """\
 # Proxyfilter for photo/wallpanel - entities your wall panel does NOT need.
-# (You maintain this file yourself; the add-on only reads it.)
+# (You can edit it here or in the add-on's web UI; the add-on keeps a .bak copy when saving from the UI.)
 #
 # One pattern per line. * and ? are wildcards. Everything after # is a comment.
-# Entities that are used on the dashboards you selected are NEVER blocked,
-# whatever is listed here - you cannot break your dashboard from this file.
+# Entities used on the dashboards you selected are NEVER blocked, whatever is
+# listed here: literal entity ids, wildcards such as sensor.air_mini_*, and the
+# entities of devices/areas that the dashboards refer to.
 #
 # You can paste lines straight from the add-on log; the entity is extracted for you.
 #
@@ -196,6 +197,65 @@ def discover_users(config_dir):
     return sorted(names, key=str.lower)
 
 
+DEFAULT_NAMES = {"default", "(default)", "overview", "lovelace"}
+
+
+def read_selection(path):
+    """dashboards / scope / users from the add-on configuration; None when unreadable."""
+    try:
+        with open(path, encoding="utf-8") as fh:
+            o = json.load(fh)
+    except (OSError, ValueError):
+        return None
+    if not isinstance(o, dict):
+        return None
+
+    def strs(v, n):
+        if not isinstance(v, list):
+            return []
+        return list(dict.fromkeys(str(x).strip()[:100] for x in v if isinstance(x, (str, int)) and str(x).strip()))[:n]
+    return {"dashboards": strs(o.get("dashboards"), 50), "users": strs(o.get("users"), 20),
+            "scope": o.get("scope") if o.get("scope") in ("port", "users") else "port"}
+
+
+def resolve_dashboard_names(names, found):
+    """Match what the user typed (URL name, title or id; case-insensitive) to dashboard keys.
+    Returns (keys, unknown_names)."""
+    keys, unknown = [], []
+    for n in names:
+        low = n.strip().casefold()
+        hit = None
+        for d in found:
+            cands = {d["key"].casefold(), str(d["url_path"]).casefold(), d["title"].casefold()}
+            if low in cands or (d["key"] == "lovelace" and low in DEFAULT_NAMES):
+                hit = d["key"]
+                break
+        if hit:
+            if hit not in keys:
+                keys.append(hit)
+        else:
+            unknown.append(n)
+    return keys, unknown
+
+
+def refresh_selection(app):
+    """Re-read dashboards/scope/users from the add-on configuration. Returns (dashboards_changed, connections_changed)."""
+    path = app["args"].options
+    sel = read_selection(path) if path else None
+    st = app["settings"].data
+    if sel is None:
+        sel = {"dashboards": app["selection"]["dashboards"], "users": st["users"], "scope": st["scope"]} \
+            if app.get("selection") else {"dashboards": [], "users": [], "scope": "port"}
+    keys, unknown = resolve_dashboard_names(sel["dashboards"], discover_dashboards(app["config_dir"]))
+    old = (list(st["dashboards"]), st["scope"], list(st["users"]), list(app.get("unknown_dash", [])))
+    app["selection"] = sel
+    st["dashboards"], st["scope"], st["users"] = keys, sel["scope"], sel["users"]
+    app["unknown_dash"] = unknown
+    app["users"] = effective_users(app)
+    new = (list(st["dashboards"]), st["scope"], list(st["users"]), unknown)
+    return new != old, (new[1], new[2]) != (old[1], old[2])
+
+
 def apply_timezone(config_dir):
     tz = ((read_json(os.path.join(config_dir, ".storage", "core.config")) or {}).get("data") or {}).get("time_zone")
     if tz:
@@ -207,7 +267,8 @@ def apply_timezone(config_dir):
 
 
 class Settings:
-    """UI-managed settings (selected dashboards and users), kept in the add-on's private /data."""
+    """Throttle settings (edited in the UI), kept in the add-on's private /data. The selected dashboards, users
+    and scope come from the add-on configuration (options.json) and live here only in memory."""
 
     def __init__(self, path):
         self.path = path
@@ -229,38 +290,90 @@ class Settings:
                 pass
             return
         raw = raw if isinstance(raw, dict) else {}
-        for k in ("dashboards", "users"):
-            v = raw.get(k)
-            self.data[k] = [str(x)[:100] for x in v][:50] if isinstance(v, list) else []
         thr = raw.get("throttle")
         if isinstance(thr, dict):
             self.data["throttle"] = {e: int(v) for e, v in thr.items()
                                      if isinstance(e, str) and ENTITY_ID_RE.match(e)
                                      and isinstance(v, int) and 1 <= v <= MAX_THROTTLE}
-        if raw.get("scope") in ("port", "users"):
-            self.data["scope"] = raw["scope"]
 
     def save(self):
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        atomic_write(self.path, json.dumps(self.data, indent=2))
+        atomic_write(self.path, json.dumps({"throttle": self.data["throttle"]}, indent=2))
 
 
 # ----------------------------------------------------------------------------- allow/deny
+WILD_RE = re.compile(r"\b[a-z][a-z0-9_]*\.[a-z0-9_]*[*?][a-z0-9_*?]*")
+REF_KEYS = {"device_id": "device", "device": "device", "devices": "device",
+            "area": "area", "area_id": "area", "areas": "area"}
+REGISTRY_FILES = ("core.entity_registry", "core.device_registry")
+
+
+def scan_dashboard(text):
+    """What a dashboard needs: literal entity ids, wildcard patterns (auto-entities & co.),
+    and the devices/areas it refers to (area cards, device actions)."""
+    ids = set(ENTITY_RE.findall(text))
+    wild = set(WILD_RE.findall(text))
+    ids -= {re.split(r"[*?]", w)[0] for w in wild}              # "sensor.air_*" also yields the fragment "sensor.air_"
+    refs = {"device": set(), "area": set()}
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+
+    def walk(x, key=None):
+        if isinstance(x, dict):
+            for k, v in x.items():
+                walk(v, k)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v, key)
+        elif isinstance(x, str) and key in REF_KEYS:
+            refs[REF_KEYS[key]].add(x)
+    walk(data)
+    return ids, wild, refs["device"], refs["area"]
+
+
+def registry_entities(config_dir, devices, areas):
+    """{entity id: reason} for entities that belong to a device/area the dashboards refer to."""
+    if not config_dir or not (devices or areas):
+        return {}
+    st = os.path.join(config_dir, ".storage")
+    ents = ((read_json(os.path.join(st, "core.entity_registry")) or {}).get("data") or {}).get("entities") or []
+    devs = ((read_json(os.path.join(st, "core.device_registry")) or {}).get("data") or {}).get("devices") or []
+    dev_area = {d.get("id"): d.get("area_id") for d in devs if isinstance(d, dict)}
+    out = {}
+    for e in ents:
+        eid = e.get("entity_id") if isinstance(e, dict) else None
+        if not isinstance(eid, str):
+            continue
+        dev = e.get("device_id")
+        area = e.get("area_id") or dev_area.get(dev)
+        if dev and dev in devices:
+            out[eid] = "its device is used on a selected dashboard"
+        elif area and area in areas:
+            out[eid] = f"its area ({area}) is used on a selected dashboard"
+    return out
+
+
 class Allow:
     """Decides which entity ids reach the panel.
 
-    Entities on the selected dashboards (and --allow patterns, built-ins) ALWAYS pass.
+    ALWAYS pass: entities on the selected dashboards (literal ids, dashboard wildcards such as
+    `sensor.air_mini_*`, and entities of devices/areas the dashboards refer to), built-ins and
+    --allow patterns. These win over the exclude file.
     mode "include": everything else is dropped.
     mode "exclude": everything else passes unless it matches an exclude pattern.
     """
 
-    def __init__(self, dashboards, patterns, mode="exclude", excludes=(), exclude_files=()):
+    def __init__(self, dashboards, patterns, mode="exclude", excludes=(), exclude_files=(), config_dir=None):
         self.dashboards = list(dashboards)
         self.exclude_files = list(exclude_files)
         self.static_excl = list(excludes)
+        self.config_dir = config_dir
         self.mode = mode
         self.rx = self._rx(list(BUILTIN_ALLOW) + list(patterns))
-        self.mtimes, self.exact, self.excl_pats, self.excl = {}, set(), [], None
+        self.mtimes, self.exact, self.excl_pats, self.excl = {}, {}, [], None
+        self.wild, self.wild_rx = [], None
         self.reload(force=True)
 
     @staticmethod
@@ -272,30 +385,44 @@ class Allow:
         return self.reload(force=True)
 
     def reload(self, force=False):
+        watch = self.dashboards + self.exclude_files
+        if self.config_dir:
+            watch += [os.path.join(self.config_dir, ".storage", f) for f in REGISTRY_FILES]
         mt = {}
-        for p in self.dashboards + self.exclude_files:
+        for p in watch:
             try:
                 mt[p] = os.path.getmtime(p)
             except OSError:
                 pass
         if not force and mt == self.mtimes:
             return False
-        exact, pats = set(), list(self.static_excl)
+        exact, pats, wild, devs, areas = {}, list(self.static_excl), set(), set(), set()
         for path in mt:
             try:
-                with open(path, encoding="utf-8") as fh:
-                    if path in self.exclude_files:
+                if path in self.exclude_files:
+                    with open(path, encoding="utf-8") as fh:
                         pats += [x for x in map(parse_pattern_line, fh) if x]
-                    else:
-                        exact |= set(ENTITY_RE.findall(fh.read()))
+                elif path in self.dashboards:
+                    with open(path, encoding="utf-8") as fh:
+                        ids, w, d, a = scan_dashboard(fh.read())
+                    for e in ids:
+                        exact.setdefault(e, f"listed on dashboard {os.path.basename(path)}")
+                    wild |= w
+                    devs |= d
+                    areas |= a
             except (OSError, UnicodeDecodeError) as exc:
                 warn(f"cannot read {path}: {exc}")
-        changed = exact != self.exact or pats != self.excl_pats
+        for e, why in registry_entities(self.config_dir, devs, areas).items():
+            exact.setdefault(e, why)
+        wild = sorted(wild)
+        changed = exact != self.exact or pats != self.excl_pats or wild != self.wild
         self.mtimes, self.exact, self.excl_pats, self.excl = mt, exact, pats, self._rx(pats)
+        self.wild, self.wild_rx = wild, self._rx(wild)
         return changed
 
     def protected(self, entity_id):
-        return entity_id in self.exact or (self.rx is not None and self.rx.match(entity_id) is not None)
+        return (entity_id in self.exact or (self.rx is not None and self.rx.match(entity_id) is not None)
+                or (self.wild_rx is not None and self.wild_rx.match(entity_id) is not None))
 
     def __call__(self, entity_id):
         if self.protected(entity_id):
@@ -303,6 +430,31 @@ class Allow:
         if self.mode == "include":
             return False
         return self.excl is None or self.excl.match(entity_id) is None
+
+    def explain(self, e):
+        """(passes, reason) - why this entity id does or does not reach the panel."""
+        if e in self.exact:
+            return True, f"passes (always): {self.exact[e]}"
+        if self.rx is not None and self.rx.match(e):
+            return True, "passes (always): built-in or extra allowed pattern"
+        for w in self.wild:
+            if fnmatch.fnmatchcase(e, w):
+                return True, f"passes (always): matches the wildcard {w} used on a selected dashboard"
+        if self.mode == "include":
+            return False, "blocked: include mode and not used on a selected dashboard"
+        for pat in self.excl_pats:
+            if fnmatch.fnmatchcase(e, pat):
+                return False, f"blocked by exclude pattern {pat}"
+        return True, "passes: not used on a dashboard, but not excluded either"
+
+    def overlaps(self):
+        """Exclude patterns that also match protected dashboard entities (those stay visible)."""
+        out = []
+        for pat in self.excl_pats:
+            hit = sorted(e for e in self.exact if fnmatch.fnmatchcase(e, pat))
+            if hit:
+                out.append({"pattern": pat, "count": len(hit), "examples": hit[:4]})
+        return out
 
 
 def filter_event(ev, allow, counts=None):
@@ -394,8 +546,21 @@ def normalize_exclude(text):
     return "\n".join(out) + "\n", converted, errors, warnings
 
 
+def ensure_exclude_file(path):
+    """Create the exclude file (with a generic template) in the add-on's own config folder if missing."""
+    if not path:
+        return
+    try:
+        if not os.path.exists(path):
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            atomic_write(path, EXCLUDE_TEMPLATE)
+            log(f"exclude file  {path} did not exist: created it with generic examples")
+    except OSError as exc:
+        warn(f"cannot create exclude file {path}: {exc}")
+
+
 def read_exclude(path):
-    """(text, exists). The add-on never writes this file; you place and edit it yourself."""
+    """(text, exists)."""
     try:
         with open(path, encoding="utf-8") as fh:
             return fh.read(), True
@@ -417,7 +582,12 @@ def compute_warnings(app):
     found = {d["key"]: d for d in discover_dashboards(app["config_dir"])}
     if not s["dashboards"] and not app["args"].dashboard:
         w.append(("warn", "No dashboard selected. Nothing is protected: entities on your wall panel dashboard can be "
-                          "blocked by the exclude list. Select the dashboard(s) your wall panel shows."))
+                          "blocked by the exclude list. Add the dashboard(s) your wall panel shows to \u201cdashboards\u201d "
+                          "in the add-on\u2019s Configuration tab."))
+    names = ", ".join(d["url_path"] for d in found.values() if d["url_path"] != "(default)") or "default"
+    for n in app.get("unknown_dash", []):
+        w.append(("warn", f"Dashboard \u201c{n}\u201d in the add-on configuration does not match any dashboard, so it "
+                          f"protects nothing. Use the URL name of the dashboard (available: {names}, or \u201cdefault\u201d)."))
     heavy = collections.Counter()
     for key in s["dashboards"]:
         d = found.get(key)
@@ -437,12 +607,12 @@ def compute_warnings(app):
     users = discover_users(app["config_dir"])
     ep = app["exclude_path"]
     if ep and app["allow"].mode == "exclude" and not os.path.isfile(ep):
-        w.append(("warn", f"Exclude file \u201c{os.path.basename(ep)}\u201d does not exist in the add-on\u2019s config "
-                          f"folder, so nothing is excluded yet. Create it there with Samba or the File editor (folder addon_configs) "
-                          f"(the web UI shows a template you can copy)."))
+        w.append(("warn", f"Exclude file \u201c{os.path.basename(ep)}\u201d could not be created in the add-on\u2019s config "
+                          f"folder, so nothing is excluded yet. Check the add-on log."))
     if s["scope"] == "users" and not s["users"] and not app["args"].user:
         w.append(("warn", "No user selected: EVERY connection (phones, browsers, ...) is filtered. "
-                          "Select the HA user the wall panel logs in with, or switch to \u201cdedicated port\u201d."))
+                          "Add the HA user the wall panel logs in with to \u201cusers\u201d in the add-on\u2019s Configuration tab, "
+                          "or set scope to \u201cport\u201d."))
     for u in (s["users"] if s["scope"] == "users" else []):
         if users and u.lower() not in {x.lower() for x in users}:
             w.append(("warn", f"Selected user “{u}” does not exist (renamed or deleted?). "
@@ -456,6 +626,12 @@ def compute_warnings(app):
         w.append(("warn", "local_only is off: port 8124 accepts connections from public IP addresses. "
                           "Never port-forward it to the internet."))
     return [{"level": lv, "text": t} for lv, t in w]
+
+
+def log_overlaps(app):
+    for o in app["allow"].overlaps():
+        log(f"exclude file  pattern {o['pattern']} also matches {o['count']} entities used on your dashboard(s) "
+            f"- those stay visible: {', '.join(o['examples'])}")
 
 
 def log_warnings(app):
@@ -562,6 +738,8 @@ async def ws_proxy(request):
                         and ("a" in ev or "c" in ev or "r" in ev)):
                     return j
                 n_in = sum(len(ev.get(k, ())) for k in "acr")
+                if "a" in ev:
+                    app["known"].update(ev["a"])                  # all entity ids that exist in HA (for the UI lists)
                 new = filter_event(ev, app["allow"], [app["counts"], ui["counts"]])
                 thr = app["throttle"]
                 if thr and new:
@@ -756,8 +934,9 @@ async def apply_changes(app, close_all=False):
         else allow.reload()
     if changed or close_all:
         targets = list(app["clients"] if close_all else app["filtered"])
-        log(f"filter changed: {len(allow.exact)} dashboard entities, {len(allow.excl_pats)} exclude patterns; "
-            f"reconnecting {len(targets)} client(s)")
+        log(f"filter changed: {len(allow.exact)} dashboard entities, {len(allow.wild)} dashboard wildcards, "
+            f"{len(allow.excl_pats)} exclude patterns; reconnecting {len(targets)} client(s)")
+        log_overlaps(app)
         for c in targets:                     # frontend reconnects and resubscribes -> fresh full state
             await c.close(code=1012, message=b"filter changed")
     return changed
@@ -774,7 +953,14 @@ async def reloader(app, every):
     while True:
         await asyncio.sleep(every)
         try:
-            await apply_changes(app)
+            dash_changed, conn_changed = refresh_selection(app)
+            if dash_changed:
+                st = app["settings"].data
+                log(f"settings      configuration changed: dashboards = {st['dashboards'] or 'none'}, "
+                    f"scope = {st['scope']}, users = {st['users'] or 'none'}")
+            await apply_changes(app, close_all=conn_changed)
+            if dash_changed:
+                log_warnings(app)
         except Exception as exc:                          # noqa: BLE001 - never let the loop die
             warn(f"reload failed: {type(exc).__name__}: {exc}")
 
@@ -876,6 +1062,8 @@ def build_state(app):
     heavy = [{"entity": e, "rate": round(n * 60 / secs, 1)} for e, n in rows
              if allow.protected(e) and n * 60 / secs >= thr and e not in thrott]
     in_rate = dict(rows)
+    busy = [{"entity": e, "rate": round(n * 60 / secs, 1), "protected": allow.protected(e), "seconds": thrott.get(e, 0)}
+            for e, n in [r for r in rows if allow(r[0])][:15] if n * 60 / secs >= 0.5]
     min_rate = 1.0
     wild = sorted(group_wildcards(cand).items(), key=lambda kv: -kv[1][1])
     ago = None if not app["seen"]["filtered"] else int(time.time() - app["seen"]["filtered"])
@@ -887,8 +1075,10 @@ def build_state(app):
         "dashboards": [{k: d[k] for k in ("key", "title", "url_path", "exists")}
                        for d in discover_dashboards(app["config_dir"])],
         "users": discover_users(app["config_dir"]),
+        "unknown_dashboards": app.get("unknown_dash", []),
         "warnings": app["warnings"],
         "heavy": heavy,
+        "busy": busy,
         "throttled": [{"entity": e, "seconds": v, "rate": round(in_rate.get(e, 0) * 60 / secs, 1)}
                       for e, v in sorted(thrott.items())],
         "status": {
@@ -939,45 +1129,6 @@ def make_ui(app):
             raise web.HTTPBadRequest(text="invalid JSON")
         return data
 
-    async def set_dashboards(request):
-        keys = (await body(request)).get("keys")
-        known = {d["key"] for d in discover_dashboards(app["config_dir"])}
-        if not isinstance(keys, list) or not all(isinstance(k, str) for k in keys):
-            return web.json_response({"ok": False, "error": "keys must be a list"}, status=400)
-        keep = [k for k in app["settings"].data["dashboards"] if k not in known and k in keys]  # keep stale pills removable
-        keys = list(dict.fromkeys([k for k in keys if k in known] + keep))
-        app["settings"].data["dashboards"] = keys
-        app["settings"].save()
-        changed = await apply_changes(app)
-        log(f"settings      dashboards = {keys or 'none'}")
-        log_warnings(app)
-        return web.json_response({"ok": True, "changed": changed, "state": build_state(app)})
-
-    async def set_users(request):
-        names = (await body(request)).get("names")
-        if not isinstance(names, list) or not all(isinstance(k, str) for k in names):
-            return web.json_response({"ok": False, "error": "names must be a list"}, status=400)
-        names = list(dict.fromkeys(n.strip()[:100] for n in names if n.strip()))[:20]
-        app["settings"].data["users"] = names
-        app["settings"].save()
-        app["users"] = effective_users(app)
-        log(f"settings      selected users = {names or 'none'}")
-        log_warnings(app)
-        await apply_changes(app, close_all=True)          # everybody re-identifies
-        return web.json_response({"ok": True, "state": build_state(app)})
-
-    async def set_scope(request):
-        scope = (await body(request)).get("scope")
-        if scope not in ("port", "users"):
-            return web.json_response({"ok": False, "error": "scope must be port or users"}, status=400)
-        app["settings"].data["scope"] = scope
-        app["settings"].save()
-        app["users"] = effective_users(app)
-        log(f"settings      filter scope = {'everything on this port' if scope == 'port' else 'selected users'}")
-        log_warnings(app)
-        await apply_changes(app, close_all=True)
-        return web.json_response({"ok": True, "state": build_state(app)})
-
     async def set_throttle(request):
         b = await body(request)
         entity, secs = b.get("entity"), b.get("seconds")
@@ -995,14 +1146,64 @@ def make_ui(app):
         log(f"settings      throttle {entity} = {secs or 'off'}")
         return web.json_response({"ok": True, "state": build_state(app)})
 
+    async def lists(request):
+        kind = request.query.get("kind")
+        allow, ui = app["allow"], app["ui"]
+        secs, counts, known = max(ui["secs"], 1), ui["counts"], app["known"]
+        if kind == "dashboard":
+            items = [{"entity": e, "reason": r, "rate": round(counts.get(e, 0) * 60 / secs, 1),
+                      "known": (e in known) if known else None} for e, r in sorted(allow.exact.items())]
+            return web.json_response({"ok": True, "items": items, "wildcards": allow.wild,
+                                      "known_count": sum(1 for i in items if i["known"]) if known else None})
+        if kind == "exclude":
+            items = []
+            for pat in allow.excl_pats:
+                hit = [(e, n) for e, n in counts.items() if fnmatch.fnmatchcase(e, pat) and not allow.protected(e)]
+                items.append({"pattern": pat, "seen": len(hit),
+                              "rate": round(sum(n for _, n in hit) * 60 / secs, 1)})
+            return web.json_response({"ok": True, "items": items})
+        return web.json_response({"ok": False, "error": "kind must be dashboard or exclude"}, status=400)
+
     async def get_exclude(_):
         path = app["exclude_path"]
         if not path:
             return web.json_response({"ok": False, "error": "no exclude file configured"}, status=404)
+        ensure_exclude_file(path)
         text, exists = read_exclude(path)
         _, _, errors, warnings = normalize_exclude(text)
         return web.json_response({"ok": True, "text": text, "exists": exists, "template": EXCLUDE_TEMPLATE,
-                                  "errors": errors, "warnings": warnings})
+                                  "errors": errors, "warnings": warnings, "overlaps": app["allow"].overlaps()})
+
+    async def put_exclude(request):
+        path = app["exclude_path"]
+        if not path:
+            return web.json_response({"ok": False, "error": "no exclude file configured"}, status=404)
+        text = (await body(request)).get("text")
+        if not isinstance(text, str) or len(text) > 200_000:
+            return web.json_response({"ok": False, "error": "text missing or too large"}, status=400)
+        new, converted, errors, warnings = normalize_exclude(text)
+        if errors:
+            return web.json_response({"ok": False, "errors": errors}, status=400)
+        backup = None
+        if os.path.exists(path):
+            backup = path + ".bak"
+            shutil.copy(path, backup)
+        atomic_write(path, new)
+        changed = await apply_changes(app)
+        n = len(app["allow"].excl_pats)
+        log(f"settings      exclude file saved from the UI: {n} patterns, {converted} line(s) converted")
+        for wmsg in warnings:
+            warn(f"exclude file: {wmsg}")
+        return web.json_response({"ok": True, "text": new, "converted": converted, "warnings": warnings,
+                                  "patterns": n, "changed": changed, "backup": os.path.basename(backup or ""),
+                                  "overlaps": app["allow"].overlaps()})
+
+    async def explain(request):
+        entity = request.query.get("entity", "").strip().lower()
+        if not ENTITY_ID_RE.match(entity):
+            return web.json_response({"ok": False, "error": "enter an entity id such as sensor.example_temperature"}, status=400)
+        passes, why = app["allow"].explain(entity)
+        return web.json_response({"ok": True, "entity": entity, "passes": passes, "reason": why})
 
     async def normalize(request):
         """Clean up lines you want to add (nothing is written anywhere)."""
@@ -1023,12 +1224,12 @@ def make_ui(app):
     ui.on_response_prepare.append(secure_headers)
     ui.router.add_get("/", index)
     ui.router.add_get("/api/state", state)
-    ui.router.add_post("/api/dashboards", set_dashboards)
-    ui.router.add_post("/api/users", set_users)
-    ui.router.add_post("/api/scope", set_scope)
     ui.router.add_post("/api/throttle", set_throttle)
     ui.router.add_get("/api/exclude", get_exclude)
+    ui.router.add_post("/api/exclude", put_exclude)
     ui.router.add_post("/api/exclude/normalize", normalize)
+    ui.router.add_get("/api/explain", explain)
+    ui.router.add_get("/api/list", lists)
     return ui
 
 
@@ -1036,6 +1237,7 @@ def make_ui(app):
 async def make_app(args):
     settings = Settings(os.path.join(args.data_dir, "settings.json"))
     exclude_path = args.exclude_file[0] if args.exclude_file else None
+    ensure_exclude_file(exclude_path)
     up = urlsplit(args.upstream)
     app = web.Application(client_max_size=1024)   # bodies are streamed, never buffered
     app["args"], app["settings"], app["config_dir"] = args, settings, args.config_dir
@@ -1049,8 +1251,9 @@ async def make_app(args):
     app["ui"] = {"in": 0, "out": 0, "secs": 0, "counts": collections.Counter()}
     app["seen"] = {"filtered": 0}
     app["clients"], app["filtered"] = set(), set()
-    app["users"] = effective_users(app)
+    app["unknown_dash"] = []
     app["user_cache"] = {}
+    app["known"] = set()
     app["throttle"] = settings.data["throttle"]        # entity id -> minimum seconds between updates
     app["blocked_at"] = 0
     app["fwd"] = {"ok": None}                         # None = not probed yet, True/False after the probe
@@ -1063,7 +1266,8 @@ async def make_app(args):
     app["rearm"] = {"v": False}
     app["counts"] = collections.Counter()
     app["warnings"] = []
-    app["allow"] = Allow([], args.allow, args.mode, args.exclude, args.exclude_file)
+    refresh_selection(app)
+    app["allow"] = Allow([], args.allow, args.mode, args.exclude, args.exclude_file, args.config_dir)
     app["allow"].set_dashboards(resolve_dashboards(app))
     app["session"] = aiohttp.ClientSession(auto_decompress=False,
                                            timeout=aiohttp.ClientTimeout(total=None, sock_connect=10))
@@ -1096,6 +1300,7 @@ async def make_app(args):
     log("filtered for  " + (f"users {sorted(app['users'])} (everybody else: passthrough)"
                            if app["users"] else "every connection on this port (dedicated panel port)"))
     log(f"listening     proxy {args.listen} -> {args.upstream}; web UI {args.ui_listen}")
+    log_overlaps(app)
     log_warnings(app)
     return app
 

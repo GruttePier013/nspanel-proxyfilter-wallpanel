@@ -15,8 +15,8 @@ How it works: the Home Assistant frontend receives every state change of every e
 the entities the device needs, for a dedicated port or for the Home Assistant user(s) you select. Everything else
 passes through unchanged.
 
-* Visual setup in the sidebar: pick dashboards with pill buttons, filter a dedicated port or a user
-* Read-only by design: you keep the exclude file; the UI builds the lines to paste
+* Dashboards, scope and users are set in the normal Configuration tab; the sidebar UI shows the result and handles filters and throttling
+* Exclude list editor in the UI (file created in the add-on's own folder); "Check an entity" explains every decision
 * Orange warnings for heavy entities and risky setups; throttling for busy entities
 * Fail-open: when in doubt the device gets the normal stream
 

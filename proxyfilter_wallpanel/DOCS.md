@@ -5,22 +5,26 @@ the Home Assistant Companion app, so the device's limited CPU is used as little 
 
 ## Quick start
 
-1. Start the add-on and open **Proxyfilter for photo/wallpanel** in the sidebar.
-2. **Step 1 – Dashboards.** Click the dashed pill of the dashboard your panel opens. Add more than one if the panel
-   switches between dashboards.
-3. **Step 2 – Which connections are filtered?** Pick one:
-   * **Dedicated port (recommended):** everything that connects to port 8124 is filtered. Only the wall panel uses
+1. Open the add-on's **Configuration** tab and fill in the two things the add-on cannot guess:
+   * **`dashboards`** – the URL names of the dashboard(s) your panel opens (the part after the `/` in the address,
+     e.g. `wallpanel`; use `default` for the default dashboard). Add more than one if the panel switches between
+     dashboards. Title or id also work, case-insensitive. The web UI lists the names you can use.
+   * **`scope`** – `port` (recommended): everything that connects to port 8124 is filtered. Only the wall panel uses
      8124; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved.
-   * **By Home Assistant user:** one port serves everybody and only the selected user(s) are filtered. Create a
-     dedicated user for the panel (Settings → People → Users) first.
-4. **Step 3 – Point the panel to the filter.** In the Companion app of the panel set the server URL to
-   `http://<home-assistant-ip>:8124` (and log in as the selected user if you chose that option).
-5. **Step 4 – Exclude list.** Create the file `proxyfilter_exclude.txt` in this add-on's config folder (`addon_configs/…_proxyfilter_wallpanel`
-   in Samba, or via the File editor add-on). The UI shows a template (*Copy complete file*). After a few minutes it lists the noisiest
-   entities that still reach the panel: click **exclude**, press **Copy new lines** and paste them into the file.
-   Within 30 seconds the filter reloads and the panel reconnects automatically.
+     `users`: one port serves everybody and only the HA user(s) in **`users`** are filtered. Create a dedicated user
+     for the panel (Settings → People → Users) first.
+2. Save and start the add-on, then open **Proxyfilter for photo/wallpanel** in the sidebar. **Step 1** shows what the
+   add-on understood from your configuration (unknown dashboard names are marked). Changes to these three options are
+   picked up within 30 seconds, also without restarting the add-on.
+3. **Step 2 – Point the panel to the filter.** In the Companion app of the panel set the server URL to
+   `http://<home-assistant-ip>:8124` (and log in as the configured user if you chose `scope: users`).
+4. **Step 3 – Exclude list.** The add-on creates `proxyfilter_exclude.txt` in its own config folder for you. After a
+   few minutes the UI lists the noisiest entities that still reach the panel: click **exclude** (or a wildcard pill) and
+   press **Save**. Within 30 seconds the filter reloads and the panel reconnects automatically. Use **Check an entity**
+   to see why an entity does or does not reach the panel.
 
-The status block in step 3 shows how much traffic was removed and whether a filtered panel is connected.
+The status block in step 2 shows how much traffic was removed and whether a filtered panel is connected. Click the
+**dashboard entities** or **exclude patterns** tile to expand the list behind the number (with filter box).
 
 ## How it works
 
@@ -40,15 +44,29 @@ the panel.
 
 ## The exclude file
 
-* **You** create and edit it; the add-on only reads it. It lives in the add-on's **own** config folder
-  (`addon_configs/…_proxyfilter_wallpanel` in Samba / File editor), which is mapped read-only, so nothing in your Home
-  Assistant configuration is touched. Default `proxyfilter_exclude.txt`; change name/sub-folder in the add-on
-  *Configuration* tab, e.g. `lists/proxyfilter_exclude.txt`.
+* It lives in the add-on's **own** config folder (`addon_configs/…_proxyfilter_wallpanel` in Samba / File editor) and
+  is **created automatically** with generic examples when missing. Edit it in the web UI (a `.bak` copy is kept on
+  every save) or by hand. Default `proxyfilter_exclude.txt`; change name/sub-folder in the add-on *Configuration* tab,
+  e.g. `lists/proxyfilter_exclude.txt`.
 * One pattern per line, `*` and `?` are wildcards, `#` starts a comment: `sensor.example_inverter_*`
 * Pasting a line from the add-on log such as `[2026-01-01 12:00:00]  19.0/min  sensor.example_meter_l1  [passed]`
-  works: the filter extracts the entity. The UI's *Copy new lines* does the same clean-up for you.
-* Lines that are not patterns are reported in the UI and ignored; they can never break the filter.
+  works: the entity is extracted when you save.
+* Invalid lines are refused in the UI (nothing is saved); in a hand-edited file they are ignored.
 * Changes are picked up within 30 seconds.
+
+### What is protected from the exclude file
+
+Everything the selected dashboards need always passes, **even when an exclude pattern matches it**:
+
+1. entity ids written in the dashboard (`sensor.air_mini_pm25`);
+2. wildcards written in the dashboard, such as `auto-entities` filters (`sensor.air_mini_*`);
+3. all entities of a **device** or **area** the dashboard refers to (area cards, device actions), resolved with
+   Home Assistant's registries.
+
+Example: with `sensor.air_*` in the exclude file, `sensor.air_monitor_*` is blocked but `sensor.air_mini_*` stays
+visible when the dashboard uses it. The UI and log tell you when a pattern also matches protected entities
+("… also matches 3 entities on your dashboard(s) – those stay visible"). **Check an entity** shows the exact reason
+for any entity id. Not detected: entities that only appear through runtime templates or regex filters.
 
 ## Throttling busy dashboard entities
 
@@ -56,18 +74,19 @@ Entities on your dashboard always reach the panel, even if they update every sec
 When the UI shows an orange "heavy dashboard entity" warning you can click **max 1 per 5 / 10 / 30 / 60 s**. The
 filter then holds back the updates in between, merges them and delivers the latest state when the interval has
 passed, so the panel never shows a stale final value. Remove the throttle with the **remove** button. The choice is
-stored in the add-on's private data; the panel reconnects are not needed.
+stored in the add-on's private data. All of this is in the **Throttling** card of the UI: a table of the busiest entities
+with a drop-down per entity, plus a field to add any entity id.
 
 ## Warnings (orange)
 
 | Warning | Meaning | What to do |
 |---|---|---|
-| No dashboard selected | Nothing is protected from the exclude list | Select the panel's dashboard |
+| No dashboard selected | Nothing is protected from the exclude list | Add the panel's dashboard to `dashboards` in the Configuration tab |
 | Dashboard has no saved configuration | An auto-generated dashboard shows *all* entities, the filter cannot know which are needed | Dashboard → ⋮ → Edit → *Take control*, save |
-| Selected dashboard no longer exists | Deleted or renamed | Remove the pill and pick the right dashboard |
-| No user selected (by-user mode) | **Every** connection is filtered, including phones | Select the panel's user, or switch to *dedicated port* |
-| Exclude file does not exist | Nothing is excluded, so little traffic is saved | Create the file (template in the UI) |
-| Selected user does not exist | Renamed/deleted; that user is not filtered | Re-select the user |
+| Selected dashboard no longer exists | Deleted or renamed | Fix the name in `dashboards` |
+| No user selected (by-user mode) | **Every** connection is filtered, including phones | Add the panel's user to `users`, or set `scope` to `port` |
+| Exclude file could not be created | Nothing is excluded, so little traffic is saved | Check the add-on log (folder permissions) |
+| Selected user does not exist | Renamed/deleted; that user is not filtered | Correct the name in `users` |
 | `camera.*` / `image.*` / `media_player.*` on the dashboard | These update often and can never be filtered | Remove them from the wall panel dashboard |
 | Heavy dashboard entity (n×/min) | A dashboard entity updates more often than *Heavy entity warning* (default 20/min) | Remove it, or use a template/helper that updates less often |
 
@@ -77,9 +96,12 @@ Warnings appear in the add-on **Log** (orange, starting with `⚠ WARNING`) and 
 
 | Option | Default | Description |
 |---|---|---|
+| `dashboards` | empty | URL names (or titles) of the dashboards the panel opens; `default` = default dashboard. Their entities always pass |
+| `scope` | `port` | `port`: filter everything on port 8124. `users`: filter only the HA users listed in `users` |
+| `users` | empty | HA user name(s) the panel logs in with (only used when `scope` is `users`) |
 | `upstream` | `http://homeassistant:8123` | Home Assistant address as seen from the add-on |
 | `mode` | `exclude` | `exclude` or `include` (only dashboard entities pass – strict) |
-| `exclude_file` | `proxyfilter_exclude.txt` | Path inside the add-on's config folder, must end in `.txt` or `.list` |
+| `exclude_file` | `proxyfilter_exclude.txt` | Path inside the add-on's own config folder, must end in `.txt` or `.list`; created if missing |
 | `local_only` | `true` | Refuse connections from public IP addresses |
 | `trusted_proxies` | empty | Address/network of a reverse proxy placed *in front of* this add-on (its `X-Forwarded-For` is then trusted) |
 | `heavy_per_minute` | `20` | Updates/min above which a dashboard entity triggers a warning |
@@ -122,8 +144,8 @@ If you keep nginx (or similar) in front of the add-on, put that proxy's address 
 ## First-run checklist
 
 1. The add-on log shows `listening … web UI …` and no `NOT reachable` warning.
-2. The sidebar page opens and lists your dashboards (and users).
-3. After step 3 the status block shows `1 / 1` filtered connections within a minute of the panel connecting.
+2. The sidebar page opens and step 1 shows your dashboard(s) as solid pills (none marked *unknown*).
+3. After step 2 the status block shows `1 / 1` filtered connections within a minute of the panel connecting.
 4. The log shows `ws auth … OK` (and, in by-user mode, `ws user … FILTERED`).
 5. "Traffic removed" rises once the exclude file contains patterns.
 6. If you see the orange *not set up for reverse proxies* warning, add the shown `http:` block and restart HA.
@@ -132,10 +154,10 @@ If you keep nginx (or similar) in front of the add-on, put that proxy's address 
 
 | Symptom | Cause / fix |
 |---|---|
-| Panel shows login but nothing is filtered | By-user mode: the panel's user is not selected (step 2), or the log says `ws user … passthrough`; the name must match the Home Assistant display name. Or the panel is not using port 8124. |
+| Panel shows login but nothing is filtered | By-user mode: the panel's user is not in `users`, or the log says `ws user … passthrough`; the name must match the Home Assistant display name. Or the panel is not using port 8124. |
 | "Filtered / open connections" stays 0 | The panel does not use `:8124` yet. Check the server URL in the Companion app. |
 | Add-on build fails with a network/timeout error | The Pi cannot reach the container registry. Check DNS/internet (`ha dns restart`), then Rebuild. |
-| A card on the panel stays empty | The entity is in the exclude list *and* not found on a selected dashboard (e.g. a YAML-mode dashboard or an entity used only inside a custom card template). Add the dashboard, or remove the pattern. |
+| A card on the panel stays empty | The entity is in the exclude list *and* not found on a selected dashboard (e.g. a YAML-mode dashboard or an entity used only inside a custom card template). Add the dashboard, or remove the pattern; **Check an entity** shows why it is blocked. |
 | Panel login loops | Open the add-on log; `login … -> 4xx` lines show the upstream answer. Check `upstream`. |
 | Filter seems stuck after a Home Assistant restart | The panel reconnects by itself; restart the Companion app if it does not. |
 
@@ -146,8 +168,9 @@ configuration.
 
 ## Privacy & security
 
-* Both the Home Assistant config folder and the add-on's own config folder are mapped **read-only**; the only
-  writable place is the add-on's private `/data` (UI choices). It cannot change your configuration. It reads `.storage/lovelace*` (dashboards), `.storage/auth` (display names of users, nothing else)
+* The Home Assistant config folder is mapped **read-only**. The add-on can write only in its **own** config folder
+  (the exclude file) and its private `/data` (UI choices). It cannot change your Home Assistant configuration. It reads `.storage/lovelace*` (dashboards), `.storage/core.entity_registry` and `core.device_registry` (which entities belong to a
+  device/area), `.storage/auth` (display names of users, nothing else)
   and `.storage/core.config` (time zone).
 * The web UI is only reachable through Home Assistant's ingress (admins only).
 * Port 8124 forwards to Home Assistant, which does the authentication. By default (`local_only`) connections from

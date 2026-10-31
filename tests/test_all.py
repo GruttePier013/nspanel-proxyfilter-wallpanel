@@ -51,7 +51,17 @@ def make_config(tmp):
         {"id": "garage", "url_path": "garage", "title": "Garage"},
         {"id": "../evil", "url_path": "x", "title": "Evil"}]}}))
     (st / "lovelace.wall_panel").write_text(json.dumps({"data": {"config": {"views": [{"cards": [
-        {"type": "entities", "entities": ["sensor.example_living_temp", "light.example_lamp", "camera.example_door"]}]}]}}}))
+        {"type": "entities", "entities": ["sensor.example_living_temp", "light.example_lamp", "camera.example_door",
+                                           "sensor.air_mini_pm25"]},
+        {"type": "area", "area": "living"},
+        {"type": "tile", "tap_action": {"action": "call-service", "target": {"device_id": "dev_kitchen"}}},
+        {"type": "custom:auto-entities", "filter": {"include": [{"entity_id": "sensor.example_wild_*"}]}}]}]}}}))
+    (st / "core.entity_registry").write_text(json.dumps({"data": {"entities": [
+        {"entity_id": "sensor.air_mini_co2", "device_id": "dev_air", "area_id": "living"},
+        {"entity_id": "sensor.air_monitor_pm25", "device_id": "dev_monitor", "area_id": None},
+        {"entity_id": "sensor.example_kitchen_temp", "device_id": "dev_kitchen", "area_id": None}]}}))
+    (st / "core.device_registry").write_text(json.dumps({"data": {"devices": [
+        {"id": "dev_air", "area_id": "living"}, {"id": "dev_monitor", "area_id": "office"}, {"id": "dev_kitchen", "area_id": None}]}}))
     (st / "auth").write_text(json.dumps({"data": {"users": [
         {"name": "Wall Panel", "is_active": True, "system_generated": False},
         {"name": "Alice", "is_active": True, "system_generated": False},
@@ -162,6 +172,21 @@ async def main():
     check([x["key"] for x in d] == ["lovelace", "wall_panel", "garage"], "dashboards discovered, unsafe id ignored")
     check(wf.discover_users(cfg) == ["Alice", "Wall Panel"], "users discovered, system user hidden")
 
+    al = wf.Allow([os.path.join(cfg, ".storage", "lovelace.wall_panel")], [], "exclude", ["sensor.air_*"], [], cfg)
+    check(al("sensor.air_mini_pm25") and "listed on dashboard" in al.explain("sensor.air_mini_pm25")[1],
+          "exclude sensor.air_* does NOT block an air_mini entity listed on the dashboard")
+    check(al("sensor.air_mini_co2") and "area (living)" in al.explain("sensor.air_mini_co2")[1],
+          "entities of an area used on the dashboard are protected (via the registry)")
+    check(al("sensor.example_kitchen_temp") and "device" in al.explain("sensor.example_kitchen_temp")[1],
+          "entities of a device used on the dashboard are protected")
+    check("sensor.example_wild_" not in al.exact, "a wildcard on the dashboard does not leave a fake entity behind")
+    check(al("sensor.example_wild_anything") and "wildcard" in al.explain("sensor.example_wild_anything")[1],
+          "dashboard wildcards (auto-entities) protect matching entities")
+    check(not al("sensor.air_monitor_pm25") and "exclude pattern sensor.air_*" in al.explain("sensor.air_monitor_pm25")[1],
+          "air_monitor is blocked by sensor.air_*, with the reason")
+    check(al.overlaps() and al.overlaps()[0]["pattern"] == "sensor.air_*" and al.overlaps()[0]["count"] >= 2,
+          "overlap report: the pattern also matches dashboard entities that stay visible")
+
     md = wf.merge_diff
     m = md({"+": {"s": "1", "a": {"x": 1, "y": 2}}, "-": {"a": ["z"]}}, {"+": {"s": "2", "a": {"x": 5, "z": 9}}, "-": {"a": ["y"]}})
     check(m == {"+": {"s": "2", "a": {"x": 5, "z": 9}}, "-": {"a": ["y"]}}, f"merge_diff keeps the latest value and attribute removals ({m})")
@@ -176,15 +201,22 @@ async def main():
     mr = web.AppRunner(mock, access_log=None)
     await mr.setup()
     await web.TCPSite(mr, "127.0.0.1", MOCK).start()
+    optfile = os.path.join(tmp, "options.json")
+    json.dump({"dashboards": [], "scope": "port", "users": []}, open(optfile, "w"))
+
+    async def setopts(**o):
+        json.dump(o, open(optfile, "w"))
+        await asyncio.sleep(2.2)                       # the reloader runs every second
+
     args = wf.parse_args(["--upstream", f"http://127.0.0.1:{MOCK}", "--config-dir", cfg, "--data-dir", data,
                           "--listen", f"127.0.0.1:{PROXY}", "--ui-listen", f"127.0.0.1:{UI}",
                           "--exclude-file", os.path.join(tmp, "addon_config", "proxyfilter_exclude.txt"),
-                          "--heavy-per-min", "5", "--report", "1", "--fast-count", "3", "--reload", "1"])
+                          "--heavy-per-min", "5", "--report", "1", "--fast-count", "3", "--reload", "1",
+                          "--options", os.path.join(tmp, "options.json")])
     runners, app = await wf.start_servers(args)
     buf = LOG
     exc_path = os.path.join(tmp, "addon_config", "proxyfilter_exclude.txt")
-    check(not os.path.exists(exc_path), "add-on never creates or writes the exclude file")
-    check(any("does not exist" in w["text"] for w in app["warnings"]), "warning when the exclude file is missing")
+    check(os.path.exists(exc_path) and "Generic examples" in open(exc_path).read(), "exclude file is created in the add-on config folder when missing")
     check(os.environ.get("TZ") == "Europe/Amsterdam", "timezone taken from HA config")
     check("No dashboard selected" in buf.getvalue() and "No user selected" not in buf.getvalue(), "startup warns: no dashboard (default scope is the dedicated port, no user needed)")
     check("\033[38;5;208m" in buf.getvalue(), "warnings are orange")
@@ -204,25 +236,34 @@ async def main():
         async with s.get(f"http://127.0.0.1:{UI}/api/state") as r0:
             j0 = await r0.json()
         check(j0["settings"]["scope"] == "port", "default scope is the dedicated port")
-        open(exc_path, "w").write("sensor.example_inverter_*\n")
-        await asyncio.sleep(1.6)                                   # picked up by the reloader
+        st, j = await jpost(s, "api/exclude", {"text": "sensor.example_inverter_*\n"})
+        check(j["ok"], "exclude saved through the UI")
         got = await collect("tok-alice", 0.6)
         check("sensor.example_inverter_power" not in got and SEEN["ws_count"] - count0 == 1,
               "dedicated port: everybody filtered, no extra lookup connection to HA")
-        st, j = await jpost(s, "api/scope", {"scope": "users"})
-        check(j["ok"] and any("No user selected" in w["text"] for w in j["state"]["warnings"]), "users scope without a user: warning")
-        st, j = await jpost(s, "api/scope", {"scope": "bogus"})
-        check(st == 400, "invalid scope refused")
-
-        # select dashboard + user through the UI API
-        st, j = await jpost(s, "api/dashboards", {"keys": ["wall_panel", "../evil", "nope"]})
-        check(j["ok"] and j["state"]["settings"]["dashboards"] == ["wall_panel"], "only known dashboards accepted")
-        check("camera.example_door" in app["allow"].exact, "dashboard entities loaded")
-        check(any("camera.* entity" in w["text"] for w in j["state"]["warnings"]), "static heavy warning (camera on dashboard)")
-        check(not any("No dashboard selected" in w["text"] for w in j["state"]["warnings"]), "no-dashboard warning cleared")
-        st, j = await jpost(s, "api/users", {"names": ["wall panel"]})
-        check(j["ok"], "user selected (case-insensitive)")
-        check(json.load(open(os.path.join(data, "settings.json")))["users"] == ["wall panel"], "settings persisted in /data")
+        for ep in ("api/scope", "api/dashboards", "api/users"):
+            async with s.post(f"http://127.0.0.1:{UI}/{ep}", json={"scope": "users"}) as r:
+                st = r.status
+            check(st in (404, 405), f"{ep} no longer exists: dashboards/scope/users come from the add-on configuration")
+        await setopts(dashboards=[], scope="users", users=[])
+        st, j = await jget(s, "api/state")
+        check(any("No user selected" in w["text"] for w in j["warnings"]), "users scope without a user: warning")
+        await setopts(dashboards=["wall_panel", "../evil", "nope"], scope="port", users=[])
+        st, j = await jget(s, "api/state")
+        check(j["settings"]["dashboards"] == ["wall_panel"] and j["unknown_dashboards"] == ["../evil", "nope"],
+              "configured dashboards resolved by URL name; unknown names reported")
+        check(any("does not match any dashboard" in w["text"] for w in j["warnings"]), "warning for unknown dashboard name")
+        check("camera.example_door" in app["allow"].exact, "dashboard entities loaded after a configuration change (no restart)")
+        check(any("camera.* entity" in w["text"] for w in j["warnings"]), "static heavy warning (camera on dashboard)")
+        check(not any("No dashboard selected" in w["text"] for w in j["warnings"]), "no-dashboard warning cleared")
+        await setopts(dashboards=["WALL PANEL", "default"], scope="users", users=["wall panel"])
+        st, j = await jget(s, "api/state")
+        check(j["settings"]["dashboards"] == ["wall_panel", "lovelace"] and j["settings"]["users"] == ["wall panel"]
+              and not j["unknown_dashboards"], "names are case-insensitive; 'default' = default dashboard; user taken over")
+        check(app["users"] == {"wall panel"}, "user scope active after configuration change")
+        await setopts(dashboards=["wall_panel"], scope="users", users=["wall panel"])
+        check(not os.path.exists(os.path.join(data, "settings.json")) or "users" not in json.load(open(os.path.join(data, "settings.json"))),
+              "dashboards/users are not persisted in /data (configuration is the single source)")
 
         # throttling a dashboard entity
         for bad in ({"entity": "../x", "seconds": 5}, {"entity": "camera.example_door", "seconds": 9999}, {"entity": "camera.example_door", "seconds": True}):
@@ -253,18 +294,23 @@ async def main():
         check(0 < ev_count <= 3 and last_state == "29", f"throttled entity: 30 updates became {ev_count}, final state delivered ({last_state})")
         await jpost(s, "api/throttle", {"entity": "camera.example_door", "seconds": 0})
 
-        # the UI cannot write the exclude file
-        async with s.post(f"http://127.0.0.1:{UI}/api/exclude", json={"text": "sensor.hack_*\n"}) as r:
-            check(r.status in (404, 405), "no endpoint writes the exclude file")
-        check("hack" not in open(exc_path).read(), "exclude file untouched by the UI")
-        st, j = await jpost(s, "api/exclude/normalize", {"text": "  12.0/min  sensor.example_inverter_power  [passed]\n"})
-        check(j["ok"] and j["text"] == "sensor.example_inverter_power\n" and j["converted"] == 1, "normalize converts pasted log lines (nothing written)")
-        st, j = await jpost(s, "api/exclude/normalize", {"text": "this is not a pattern\n"})
-        check(st == 200 and not j["ok"] and j["errors"], "normalize reports invalid lines")
+        # exclude file editor
+        st, j = await jpost(s, "api/exclude", {"text": "  12.0/min  sensor.example_inverter_power  [passed]\n"})
+        check(j["ok"] and j["converted"] == 1 and os.path.exists(exc_path + ".bak"), "exclude saved, pasted log line converted, backup written")
+        st, j = await jpost(s, "api/exclude", {"text": "this is not a pattern\n"})
+        check(st == 400 and j["errors"], "invalid exclude refused")
+        check("sensor.example_inverter_power" in open(exc_path).read(), "file unchanged after a refused save")
         st, j = await jget(s, "api/exclude")
-        check(j["ok"] and "sensor.example_inverter_*" in j["text"] and j["exists"] and "Generic examples" in j["template"], "UI can read the file and offers a template")
-        open(exc_path, "w").write("sensor.example_inverter_power\n")      # you edit the file yourself
-        await asyncio.sleep(1.6)
+        check(j["ok"] and j["exists"] and "sensor.example_inverter_power" in j["text"], "UI can read the file")
+        st, j = await jpost(s, "api/exclude", {"text": "sensor.air_*\n"})
+        check(j["ok"] and any(o["pattern"] == "sensor.air_*" for o in j["overlaps"]), "save reports patterns that overlap dashboard entities")
+        st, j = await jget(s, "api/explain?entity=sensor.air_mini_pm25")
+        check(j["ok"] and j["passes"] and "dashboard" in j["reason"], "explain endpoint: dashboard entity passes despite the pattern")
+        st, j = await jget(s, "api/explain?entity=sensor.air_monitor_pm25")
+        check(j["ok"] and not j["passes"], "explain endpoint: air_monitor blocked")
+        st, j = await jget(s, "api/explain?entity=../etc")
+        check(st == 400, "explain refuses invalid input")
+        st, j = await jpost(s, "api/exclude", {"text": "sensor.example_inverter_power\n"})
 
         # filtering per user
         got = await collect("tok-panel")
@@ -281,6 +327,16 @@ async def main():
         check(any(c["entity"] == "sensor.example_meter_l1" for c in j["candidates"]), "noisy candidate shown in UI state")
         check(any(h["entity"] == "camera.example_door" for h in j["heavy"]), "heavy dashboard entity detected live")
         check(j["status"]["in_per_min"] > j["status"]["out_per_min"] > 0, "traffic stats")
+        check(any(b["entity"] == "camera.example_door" and b["protected"] for b in j["busy"]), "busy list for the throttle card contains the busy dashboard entity")
+        st, jl = await jget(s, "api/list?kind=dashboard")
+        items = {i["entity"]: i for i in jl["items"]}
+        check(jl["ok"] and "sensor.air_mini_co2" in items and "area (living)" in items["sensor.air_mini_co2"]["reason"]
+              and items["sensor.example_living_temp"]["known"] is True and items["sensor.air_mini_pm25"]["known"] is False and "sensor.example_wild_*" in jl["wildcards"],
+              "dashboard list: entities with the reason they pass, wildcards, known flag")
+        st, jl = await jget(s, "api/list?kind=exclude")
+        check(jl["ok"] and any(i["pattern"] for i in jl["items"]), "exclude list endpoint")
+        st, jl = await jget(s, "api/list?kind=bogus")
+        check(st == 400, "list endpoint refuses unknown kind")
 
         # an exclude change reconnects a filtered panel
         async with aiohttp.ClientSession() as s2:
@@ -288,7 +344,7 @@ async def main():
             await ws.receive_json(); await ws.send_json({"type": "auth", "access_token": "tok-panel"}); await ws.receive_json()
             await ws.send_json({"id": 3, "type": "subscribe_entities"})
             await asyncio.sleep(0.4)
-            open(exc_path, "w").write("sensor.example_meter_*\n")          # user edits the file by hand
+            await jpost(s, "api/exclude", {"text": "sensor.example_meter_*\n"})
             closed = False
             for _ in range(60):
                 m = await ws.receive(timeout=4)

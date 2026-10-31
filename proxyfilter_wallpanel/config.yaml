@@ -23,8 +23,11 @@ ports_description:
   8124/tcp: "Filtered Home Assistant address for the wall panel"
 map:
   - homeassistant_config:ro
-  - addon_config:ro
+  - addon_config:rw
 options:
+  dashboards: []
+  scope: port
+  users: []
   upstream: "http://homeassistant:8123"
   mode: exclude
   exclude_file: "proxyfilter_exclude.txt"
@@ -36,6 +39,11 @@ options:
   min_per_hour: 120
   verbose: false
 schema:
+  dashboards:
+    - str
+  scope: list(port|users)
+  users:
+    - str
   upstream: url
   mode: list(include|exclude)
   local_only: bool

@@ -27,12 +27,14 @@ the entities that device needs. Login, the dashboard itself and all other traffi
 ## Features
 
 - 🖥️ **Visual add-on** in the sidebar – no YAML needed
-- 🔘 **Pill buttons** to pick the dashboards the panel opens, and whether to filter a dedicated port or a Home Assistant user
-- 📝 **Exclude list helper**: you keep the file yourself; the UI shows it, validates it and builds the lines to paste
+- ⚙️ **Dashboards, scope and users in the normal Configuration tab** (dedicated port or Home Assistant user); the web UI shows what was understood and focuses on filters
+- 📝 **Exclude list editor** in the UI: the file is created for you in the add-on's own folder, validated and backed up
+- 🔍 **Check an entity** to see why it passes or is blocked; clickable lists behind the dashboard/exclude counters
+- 🧭 Dashboard entities are protected, including wildcards, devices and areas the dashboard uses
 - ⏱️ **Throttle** busy dashboard entities (e.g. power sensors) without removing them
 - 📊 **Noisiest entities** list with one-click exclude and wildcard suggestions
 - 🟠 **Orange warnings** (log and UI) for heavy entities on the panel dashboard and for risky setups
-- 🔒 **Hardened**: read-only access to HA, local network only, forged client addresses stripped – see [SECURITY.md](SECURITY.md)
+- 🔒 **Hardened**: read-only access to the HA config (write access only to its own folder), local network only, forged client addresses stripped – see [SECURITY.md](SECURITY.md)
 - 🛟 **Fail-open**: if anything is unclear the panel simply gets the normal, unfiltered stream
 - Entities on your dashboards are **never** blocked, so you cannot break the panel from the exclude list
 

@@ -7,12 +7,19 @@ All notable changes to this add-on. Format based on [Keep a Changelog](https://k
 First public release of **Proxyfilter for photo/wallpanel**.
 
 ### Added
-- **Web UI in the Home Assistant sidebar** (ingress) to manage everything without editing add-on options.
-- **Dashboard pills**: pick one or more dashboards your wall panel opens; their entities always pass.
-- **Two ways to recognise the panel**: a *dedicated port* (everything on port 8124 is filtered; recommended, no token
-  handling) or *by Home Assistant user* (pills; one port serves everybody).
-- **Exclude list helper**: shows the file read-only, reports invalid lines, builds clean lines to paste (pasted log
-  lines are converted), offers a template. The add-on never writes the file.
+- **Web UI in the Home Assistant sidebar** (ingress) for the exclude list, throttling, live statistics and checks.
+- **`dashboards` option** in the normal Configuration tab: dashboards your wall panel opens, by URL name, title or id
+  (`default` = default dashboard); their entities always pass. Unknown names are reported in the UI and log.
+- **Two ways to recognise the panel** (`scope` option): `port` (everything on port 8124 is filtered; recommended, no
+  token handling) or `users` (the HA users in `users`; one port serves everybody). Changes apply within 30 s without
+  a restart.
+- **Exclude list editor**: the file is created in the add-on's own config folder, edited in the UI with validation,
+  pasted log lines are converted, a `.bak` copy is kept, changes apply immediately.
+- **Dashboard protection**: besides literal entity ids, wildcards used on the dashboard (`sensor.air_mini_*`) and the
+  entities of devices/areas the dashboard refers to always pass, even when an exclude pattern matches them. The UI
+  and log report such overlaps.
+- **Check an entity** tool, and clickable lists behind the *dashboard entities* and *exclude patterns* counters.
+- **Throttling card** with a table of the busiest entities and a drop-down per entity.
 - **Throttling**: slow down busy dashboard entities to at most one update per 5/10/30/60 s (latest value always delivered).
 - **Noisiest entities** table and wildcard suggestions with one-click "add to new lines".
 - **Orange warnings** in the add-on log and UI for heavy dashboard entities (camera/image/media_player and
@@ -21,8 +28,8 @@ First public release of **Proxyfilter for photo/wallpanel**.
 - Health endpoint and Supervisor watchdog; log timestamps follow the Home Assistant time zone; new icon and logo.
 
 ### Security
-- Home Assistant config folder and the add-on's own config folder (`addon_config`, holds your exclude file) are both
-  mapped **read-only**; the only writable place is the add-on's private `/data`.
+- Home Assistant config folder mapped **read-only**; the add-on can write only its own config folder (`addon_config`,
+  the exclude file) and its private `/data`.
 - `local_only` (default on): connections from public IP addresses are refused.
 - Client-supplied `X-Forwarded-For`, `X-Real-IP` and `Forwarded` headers are removed; the verified address is sent
   instead (when Home Assistant is set up for it, detected automatically). `trusted_proxies` is an explicit opt-in.
