@@ -7,6 +7,16 @@ access tokens, and forwards it to Home Assistant. Authentication stays with Home
 **Filtering is a performance feature, not a security boundary**: it can only hide entity updates from a panel, never
 reveal more than Home Assistant would send to that user anyway.
 
+## What the add-on can read and write
+
+- The Home Assistant config folder is mapped **read-only**. The add-on reads `.storage/lovelace*` (dashboards),
+  `.storage/core.entity_registry` and `core.device_registry` (which entities belong to a device or area),
+  `.storage/auth` (display names of users, nothing else) and `.storage/core.config` (time zone).
+- It can write only in its **own** config folder (the exclude file, with a `.bak` copy) and its private `/data`
+  (UI choices and throttles). It cannot change your Home Assistant configuration.
+- The web UI is reachable only through Home Assistant's ingress (admins only).
+- Access tokens are never stored or logged; a SHA-256 hash is cached in memory for 5 minutes in by-user mode.
+
 ## Threat model and mitigations
 
 | Threat | Mitigation |

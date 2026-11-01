@@ -36,7 +36,7 @@ from urllib.parse import urlsplit
 import aiohttp
 from aiohttp import WSMsgType, web
 
-VERSION = "2.0.0"
+VERSION = "2.0.4"
 
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
        "te", "trailers", "transfer-encoding", "upgrade", "host"}
@@ -53,6 +53,9 @@ ORANGE, RESET = "\033[38;5;208m", "\033[0m"
 VERBOSE = False
 CTRL_RE = re.compile(r"[\x00-\x1f\x7f-\x9f]")
 FWD_HEADERS = {"x-forwarded-for", "x-forwarded-host", "x-forwarded-proto", "x-real-ip", "forwarded"}
+UP_MAX = 64 * 1024 * 1024              # largest message accepted from Home Assistant (a full state dump is a few MB)
+DEFAULT_MAX_CONNECTIONS = 20           # simultaneous websocket connections through the proxy
+UI_LIMITS = {"GET": 120, "POST": 60}   # web UI requests per minute (the page polls 12 times a minute)
 WS_CLIENT_MAX = 16 * 1024 * 1024        # largest message a client may send us (HA itself allows far less)
 
 EXCLUDE_TEMPLATE = """\
@@ -214,6 +217,7 @@ class Settings:
     def __init__(self, path):
         self.path = path
         self.data = {"dashboards": [], "users": [], "scope": "port", "throttle": {}}
+        self.prev_version = None                  # version that wrote the file (None = first start)
         self.load()
 
     def load(self):
@@ -231,6 +235,7 @@ class Settings:
                 pass
             return
         raw = raw if isinstance(raw, dict) else {}
+        self.prev_version = str(raw.get("version"))[:20] if raw.get("version") else "older"
         for k in ("dashboards", "users"):
             v = raw.get(k)
             self.data[k] = [str(x)[:100] for x in v][:50] if isinstance(v, list) else []
@@ -244,7 +249,7 @@ class Settings:
 
     def save(self):
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        atomic_write(self.path, json.dumps(self.data, indent=2))
+        atomic_write(self.path, json.dumps({"version": VERSION, **self.data}, indent=2))
 
 
 # ----------------------------------------------------------------------------- allow/deny
@@ -587,7 +592,7 @@ def user_matches(user, wanted):
 
 
 async def _whoami(app, token, headers=None):
-    async with app["session"].ws_connect(app["up_ws"], max_msg_size=0, headers=headers) as ws:
+    async with app["session"].ws_connect(app["up_ws"], max_msg_size=UP_MAX, headers=headers) as ws:
         await ws.receive_json()                                   # auth_required
         await ws.send_json({"type": "auth", "access_token": token})
         if (await ws.receive_json()).get("type") != "auth_ok":
@@ -617,9 +622,80 @@ async def identify(app, token, headers=None):
     return user
 
 
+# ----------------------------------------------------------------------------- health: failures + self-test
+def note_fail(app, name, exc):
+    """Count consecutive failures of a background job / the upstream. Logs the first, then at 5, 20, 100, 500..."""
+    f = app["fail"].setdefault(name, {"streak": 0, "total": 0, "last": ""})
+    f["streak"] += 1
+    f["total"] += 1
+    f["last"] = f"{type(exc).__name__}: {exc}"[:200]
+    n = f["streak"]
+    if n == 1 or n in (5, 20) or (n >= 100 and n % 400 == 100):
+        warn(f"{name} failed {n}\u00d7 in a row: {f['last']}")
+
+
+def note_ok(app, name):
+    f = app["fail"].get(name)
+    if f and f["streak"]:
+        if f["streak"] >= 3:
+            log(f"{name} recovered after {f['streak']} failures")
+        f["streak"] = 0
+
+
+async def selftest(app):
+    """Startup / on-demand checks. Returns [{ok, text}] and stores it in app['selftest']."""
+    args, out = app["args"], []
+
+    def add(ok, text):
+        out.append({"ok": bool(ok), "text": text})
+    try:
+        async with app["session"].get(app["upstream"] + "/manifest.json",
+                                      timeout=aiohttp.ClientTimeout(total=10)) as r:
+            add(r.status < 500, f"Home Assistant reachable at {app['upstream']} (HTTP {r.status})")
+    except Exception as exc:                                  # noqa: BLE001
+        add(False, f"Home Assistant NOT reachable at {app['upstream']}: {type(exc).__name__}: {exc}")
+    st = os.path.join(args.config_dir, ".storage")
+    add(os.access(st, os.R_OK), "Home Assistant .storage folder readable" if os.access(st, os.R_OK)
+        else f"cannot read {st} (is the config folder mapped?)")
+    dashes = discover_dashboards(args.config_dir)
+    add(len(dashes) > 1 or dashes[0]["exists"], f"{len(dashes)} dashboard(s) found")
+    sel = [k for k in app["settings"].data["dashboards"] if k not in {d["key"] for d in dashes}]
+    if sel:
+        add(False, f"selected dashboard(s) no longer exist: {', '.join(sel)}")
+    ep = app["exclude_path"]
+    if ep:
+        ok = os.path.isfile(ep) and os.access(ep, os.R_OK | os.W_OK)
+        add(ok, f"exclude file {os.path.basename(ep)} readable and writable" if ok
+            else f"exclude file {ep} missing or not readable/writable")
+    dd = os.path.dirname(app["settings"].path) or "."
+    add(os.access(dd, os.W_OK), "add-on data folder writable" if os.access(dd, os.W_OK)
+        else f"cannot write to {dd}: UI choices will be lost on restart")
+    try:
+        ver = tuple(int(x) for x in aiohttp.__version__.split(".")[:2])
+    except ValueError:
+        ver = (99, 0)
+    add(ver >= (3, 8), f"aiohttp {aiohttp.__version__}" + ("" if ver >= (3, 8) else " is too old (3.8 or newer needed)"))
+    bad = [o for o in out if not o["ok"]]
+    app["selftest"] = {"at": int(time.time()), "checks": out}
+    if bad:
+        for o in bad:
+            warn(f"self-test     {o['text']}")
+        log(f"self-test     {len(out) - len(bad)}/{len(out)} checks OK, {len(bad)} need attention")
+    else:
+        log(f"self-test     all {len(out)} checks OK")
+    return out
+
+
 # ----------------------------------------------------------------------------- proxy
 async def ws_proxy(request):
     app = request.app
+    if len(app["clients"]) >= app["max_connections"]:
+        app["health"]["refused"] += 1
+        if time.time() - app["health"]["refused_at"] > 60:                  # one log line per minute at most
+            app["health"]["refused_at"] = time.time()
+            warn(f"too many websocket connections ({len(app['clients'])}, limit {app['max_connections']}): "
+                 f"refusing {peer_of(request)}. Raise max_connections if you really use that many panels.")
+        return web.Response(status=503, text="too many connections", headers={"Retry-After": "10"})
     client = web.WebSocketResponse(max_msg_size=WS_CLIENT_MAX, heartbeat=30)
     await client.prepare(request)
     sub_ids, seen = set(), set()
@@ -645,7 +721,8 @@ async def ws_proxy(request):
     fwd = forward_headers(request)
     reason = "closed"
     try:
-        async with app["session"].ws_connect(app["up_ws"], max_msg_size=0, heartbeat=30, headers=fwd) as up:
+        async with app["session"].ws_connect(app["up_ws"], max_msg_size=UP_MAX, heartbeat=30, headers=fwd) as up:
+            note_ok(app, "Home Assistant connection")
 
             async def c2u():
                 async for m in client:
@@ -794,6 +871,7 @@ async def ws_proxy(request):
                         traceback.print_exception(exc)
     except aiohttp.ClientError as exc:
         reason = f"upstream error: {exc}"
+        note_fail(app, "Home Assistant connection", exc)
     except ConnectionResetError as exc:
         reason = f"connection reset: {exc}"
     except asyncio.CancelledError:
@@ -823,6 +901,7 @@ async def http_proxy(request):
         async with app["session"].request(
                 request.method, url, headers=headers, data=body,
                 allow_redirects=False, auto_decompress=False) as r:
+            note_ok(app, "Home Assistant connection")
             resp = web.StreamResponse(status=r.status, reason=r.reason)
             for k, v in r.headers.items():
                 if k.lower() not in HOP:
@@ -840,6 +919,7 @@ async def http_proxy(request):
             log(f"http          {peer} {request.method} {path} client aborted ({type(exc).__name__})")
         return resp if resp is not None else web.Response(status=499)
     except aiohttp.ClientError as exc:
+        note_fail(app, "Home Assistant connection", exc)
         log(f"http          {peer} {request.method} {path} -> 502 upstream error: {exc}")
         return web.Response(status=502, text=f"upstream error: {exc}")
 
@@ -885,7 +965,11 @@ async def apply_changes(app, close_all=False):
 async def forward_prober(app):
     """Probe at startup, then every minute until it works (HA may start later than this add-on)."""
     while True:
-        await probe_forwarding(app)
+        try:
+            await probe_forwarding(app)
+            note_ok(app, "forwarding probe")
+        except Exception as exc:                          # noqa: BLE001
+            note_fail(app, "forwarding probe", exc)
         await asyncio.sleep(60 if not app["fwd"]["ok"] else 900)
 
 
@@ -894,8 +978,9 @@ async def reloader(app, every):
         await asyncio.sleep(every)
         try:
             await apply_changes(app)
+            note_ok(app, "reload")
         except Exception as exc:                          # noqa: BLE001 - never let the loop die
-            warn(f"reload failed: {type(exc).__name__}: {exc}")
+            note_fail(app, "reload", exc)
 
 
 async def report(app, every, top, fast_count, slow_every):
@@ -1009,6 +1094,9 @@ def build_state(app):
                        for d in discover_dashboards(app["config_dir"])],
         "users": discover_users(app["config_dir"]),
         "warnings": app["warnings"],
+        "selftest": app.get("selftest"),
+        "health": {"refused": app["health"]["refused"], "max_connections": app["max_connections"],
+                   "failures": {k: v for k, v in app["fail"].items() if v["total"]}},
         "heavy": heavy,
         "busy": busy,
         "throttled": [{"entity": e, "seconds": v, "rate": round(in_rate.get(e, 0) * 60 / secs, 1)}
@@ -1032,10 +1120,20 @@ def build_state(app):
 def make_ui(app):
     page_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ui", "index.html")
 
+    recent = {"GET": collections.deque(), "POST": collections.deque()}
+
     @web.middleware
     async def guard(request, handler):
         if request.remote not in (INGRESS_GATEWAY, "127.0.0.1", "::1") and not app["args"].ui_open:
             return web.Response(status=403, text="Open this page from the Home Assistant sidebar.")
+        kind = "POST" if request.method == "POST" else "GET"
+        q, now = recent[kind], time.time()
+        while q and now - q[0] > 60:
+            q.popleft()
+        if len(q) >= UI_LIMITS[kind]:                             # rate limit: a runaway tab cannot flood the add-on
+            return web.json_response({"ok": False, "error": "too many requests, slow down"}, status=429,
+                                     headers={"Retry-After": "10"})
+        q.append(now)
         if request.method == "POST" and request.content_type != "application/json":
             return web.json_response({"ok": False, "error": "bad content type"}, status=415)
         try:
@@ -1098,6 +1196,10 @@ def make_ui(app):
         log(f"settings      filter scope = {'everything on this port' if scope == 'port' else 'selected users'}")
         log_warnings(app)
         await apply_changes(app, close_all=True)
+        return web.json_response({"ok": True, "state": build_state(app)})
+
+    async def run_selftest(_):
+        await selftest(app)
         return web.json_response({"ok": True, "state": build_state(app)})
 
     async def set_throttle(request):
@@ -1204,12 +1306,20 @@ def make_ui(app):
     ui.router.add_post("/api/exclude/normalize", normalize)
     ui.router.add_get("/api/explain", explain)
     ui.router.add_get("/api/list", lists)
+    ui.router.add_post("/api/selftest", run_selftest)
     return ui
 
 
 # ----------------------------------------------------------------------------- app setup
 async def make_app(args):
     settings = Settings(os.path.join(args.data_dir, "settings.json"))
+    if settings.prev_version and settings.prev_version != VERSION:
+        log(f"update        updated from {settings.prev_version} to {VERSION}; your dashboards, scope, throttles "
+            f"and exclude file are kept")
+    try:
+        settings.save()                                   # records the running version
+    except OSError as exc:
+        warn(f"cannot write settings to {settings.path}: {exc}")
     exclude_path = args.exclude_file[0] if args.exclude_file else None
     ensure_exclude_file(exclude_path)
     up = urlsplit(args.upstream)
@@ -1230,6 +1340,9 @@ async def make_app(args):
     app["known"] = set()
     app["throttle"] = settings.data["throttle"]        # entity id -> minimum seconds between updates
     app["blocked_at"] = 0
+    app["max_connections"] = args.max_connections
+    app["health"] = {"refused": 0, "refused_at": 0}
+    app["fail"] = {}
     app["fwd"] = {"ok": None}                         # None = not probed yet, True/False after the probe
     app["trusted_nets"] = []
     for net in args.trusted_proxy:
@@ -1246,16 +1359,8 @@ async def make_app(args):
                                            timeout=aiohttp.ClientTimeout(total=None, sock_connect=10))
     app.router.add_route("*", "/{tail:.*}", handler)
 
-    async def check_upstream(a):
-        try:
-            async with a["session"].get(a["upstream"] + "/manifest.json",
-                                        timeout=aiohttp.ClientTimeout(total=10)) as r:
-                log(f"upstream      {a['upstream']} reachable (HTTP {r.status})")
-        except Exception as exc:                      # noqa: BLE001
-            warn(f"Home Assistant at {a['upstream']} is NOT reachable: {exc}")
-
     async def start_bg(a):
-        asyncio.ensure_future(check_upstream(a))
+        asyncio.ensure_future(selftest(a))
         a["bg"] = [asyncio.ensure_future(forward_prober(a)),
                    asyncio.ensure_future(report(a, args.report, args.top, args.fast_count, args.slow_report)),
                    asyncio.ensure_future(reloader(a, args.reload))]
@@ -1301,6 +1406,8 @@ def apply_options(args, path):
             setattr(args, attr, float(o[key]))
     if o.get("top") is not None:
         args.top = int(o["top"])
+    if o.get("max_connections") is not None:
+        args.max_connections = int(o["max_connections"])
     if o.get("verbose"):
         args.verbose = True
     if o.get("local_only") is not None:
@@ -1332,6 +1439,8 @@ def parse_args(argv=None):
     ap.add_argument("--user", action="append", default=[], help="extra HA user (name or id) to filter")
     ap.add_argument("--min-per-min", type=float, default=2.0)
     ap.add_argument("--min-per-hr", type=float, default=120.0)
+    ap.add_argument("--max-connections", type=int, default=DEFAULT_MAX_CONNECTIONS,
+                    help="maximum simultaneous websocket connections through the proxy")
     ap.add_argument("--heavy-per-min", type=float, default=20.0, help="warn for dashboard entities above this rate")
     ap.add_argument("--fast-count", type=int, default=10)
     ap.add_argument("--slow-report", type=int, default=3600)

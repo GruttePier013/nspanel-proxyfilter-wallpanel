@@ -1,33 +1,36 @@
 configuration:
   upstream:
-    name: Home Assistant URL
-    description: "👉 **STAP 1 ▶ Start de WEB-UI om de configuratie te voltooien** (kies daar je dashboards en filterbereik). De opties hieronder zijn geavanceerd en hoeven zelden te worden aangepast. \n\nAdres van Home Assistant zoals deze add-on het ziet. Laat staan tenzij je het hebt aangepast."
+    name: "Home Assistant-URL"
+    description: "👉 **Stap 1: start de web-UI om de setup af te ronden.** Dashboards en filterbereik kies je daar; de opties hieronder zijn geavanceerd.\n\nAdres van Home Assistant gezien vanuit deze add-on (standaard http://homeassistant:8123)."
   mode:
-    name: Modus
-    description: "exclude: alles gaat naar het paneel behalve wat in het exclude-bestand staat (aanbevolen, nieuwe entities blijven werken). include: ALLEEN entities van de gekozen dashboards gaan door."
+    name: "Modus"
+    description: "exclude: alles doorsturen behalve het exclude-bestand; include: alleen dashboard-entities (standaard exclude)."
   exclude_file:
-    name: Exclude-bestand (in de add-on-configmap)
-    description: "Bestand in de eigen configmap van deze add-on (zichtbaar als addon_configs in Samba / File editor). Wordt automatisch aangemaakt en is aanpasbaar in de web-UI van de add-on. Wijzig hier naam/locatie, bijv. packages/proxyfilter_exclude.txt. Moet op .txt of .list eindigen."
+    name: "Exclude-bestand"
+    description: "Bestand in de eigen configmap van de add-on, .txt of .list; wordt automatisch aangemaakt (standaard proxyfilter_exclude.txt)."
   local_only:
-    name: Alleen lokaal netwerk
-    description: "Weiger verbindingen vanaf publieke IP-adressen (aanbevolen). Alleen uitzetten als het paneel van buiten je netwerk verbindt, en zet er dan HTTPS voor."
+    name: "Alleen lokaal netwerk"
+    description: "Weiger verbindingen van publieke IP-adressen (standaard aan)."
   trusted_proxies:
-    name: Vertrouwde reverse proxies
-    description: "Alleen als je nginx of iets dergelijks VOOR deze add-on zet: adres of netwerk (bijv. 192.168.1.5 of 172.30.32.0/23). Diens X-Forwarded-For wordt dan vertrouwd; van alle anderen wordt hij genegeerd."
+    name: "Vertrouwde reverse proxy's"
+    description: "Adres of netwerk van een reverse proxy vóór deze add-on, bijv. 192.168.1.5 (standaard geen)."
   heavy_per_minute:
-    name: Waarschuwing zware entity (updates per minuut)
-    description: "Dashboard-entities die vaker updaten krijgen een oranje waarschuwing in het log en de UI."
+    name: "Waarschuwing zware entity"
+    description: "Waarschuw als een dashboard-entity vaker dan dit aantal keer per minuut verandert (standaard 20)."
   top:
-    name: Regels per lijst in het log
-    description: "Hoeveel entities per lijst in het log (0 = geen lijsten)."
+    name: "Regels per lograpport"
+    description: "Entities per lijst in de lograpporten, 0 voor geen (standaard 25)."
+  max_connections:
+    name: "Maximaal aantal verbindingen"
+    description: "Maximaal aantal gelijktijdige websocket-verbindingen via poort 8124; extra krijgen HTTP 503 (standaard 20)."
   min_per_minute:
-    name: Log-drempel per minuut
-    description: "Entities onder deze snelheid worden niet getoond in de per-minuutrapporten."
+    name: "Logdrempel per minuut"
+    description: "Verberg entities onder deze snelheid in de lograpporten per minuut (standaard 2)."
   min_per_hour:
-    name: Log-drempel per uur
-    description: "Entities onder deze snelheid worden niet getoond in de uurrapporten."
+    name: "Logdrempel per uur"
+    description: "Verberg entities onder deze snelheid in de lograpporten per uur (standaard 120)."
   verbose:
-    name: Elk HTTP-verzoek loggen
-    description: "Normaal worden alleen fouten en inlogpogingen gelogd."
+    name: "Elke HTTP-aanvraag loggen"
+    description: "Log alle aanvragen, niet alleen fouten en logins (standaard uit)."
 network:
   8124/tcp: "Gefilterd Home Assistant-adres voor het wandpaneel"

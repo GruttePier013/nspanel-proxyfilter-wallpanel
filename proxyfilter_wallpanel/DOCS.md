@@ -1,31 +1,28 @@
-# Proxyfilter for photo/wallpanel – documentation
-
-> ### 👉 STEP 1 ▶ **Start the WEB-UI to complete the configuration** 🖥️
-> Open *Proxyfilter for photo/wallpanel* in the sidebar and pick your dashboards there. ✅
-
-Proxy filter designed to feed only traffic relevant to a wallpanel, photo frame or other small hardware device running
-the Home Assistant Companion app, so the device's limited CPU is used as little as possible.
+# Documentation
 
 ## Quick start
 
-1. **▶ Start the WEB-UI to complete the configuration.** Start the add-on and open **Proxyfilter for photo/wallpanel**
-   in the sidebar. The Configuration tab only holds advanced options; your dashboards are chosen in the web UI.
-2. **Step 1 – Dashboards.** Click the dashed pill of the dashboard your panel opens. Add more than one if the panel
-   switches between dashboards.
-3. **Step 2 – Which connections are filtered?** Pick one:
+1. **Start the add-on** and open **Proxyfilter for photo/wallpanel** in the sidebar. The *Setup* block opens by itself
+   until a dashboard is selected and a panel has connected.
+2. **Dashboards.** Click the dashed pill of the dashboard your panel opens. Add more than one if the panel switches
+   between dashboards.
+3. **Which connections are filtered?** Pick one:
    * **Dedicated port (recommended):** everything that connects to port 8124 is filtered. Only the wall panel uses
      8124; phones and browsers keep using Home Assistant's normal address. No tokens or user lookups are involved.
    * **By Home Assistant user:** one port serves everybody and only the selected user(s) are filtered. Create a
      dedicated user for the panel (Settings → People → Users) first.
-4. **Step 3 – Point the panel to the filter.** In the Companion app of the panel set the server URL to
+4. **Point the panel to the filter.** In the Companion app of the panel set the server URL to
    `http://<home-assistant-ip>:8124` (and log in as the selected user if you chose that option).
-5. **Step 4 – Exclude list.** The add-on creates `proxyfilter_exclude.txt` in its own config folder for you. After a
-   few minutes the UI lists the noisiest entities that still reach the panel: click **exclude** (or a wildcard pill) and
-   press **Save**. Within 30 seconds the filter reloads and the panel reconnects automatically. Use **Check an entity**
-   to see why an entity does or does not reach the panel.
+5. **Check that it works.** Within a minute the summary at the top shows `1 / 1` filtered connections and the log
+   shows `ws auth … OK` (in by-user mode also `ws user … FILTERED`). The log must not show a `NOT reachable` warning.
+   If you see the orange *not set up for reverse proxies* warning, add the `http:` block from the
+   [Advanced](#advanced-client-addresses-bans-and-trusted_proxies) section and restart Home Assistant.
+6. **Fill the exclude list.** The add-on creates `proxyfilter_exclude.txt` in its own config folder. After a few
+   minutes the UI lists the noisiest entities that still reach the panel: click **exclude** (or a wildcard pill) and
+   press **Save**. Within 30 seconds the filter reloads and the panel reconnects. "Traffic removed" rises as the list
+   grows. Use **Check an entity** to see why an entity does or does not reach the panel.
 
-The status block in step 3 shows how much traffic was removed and whether a filtered panel is connected. Click the
-**dashboard entities** or **exclude patterns** tile to expand the list behind the number (with filter box).
+Click the **dashboard entities** or **exclude patterns** tile in the summary to expand the list behind the number.
 
 ## How it works
 
@@ -82,6 +79,7 @@ with a drop-down per entity, plus a field to add any entity id.
 
 | Warning | Meaning | What to do |
 |---|---|---|
+| `too many websocket connections` in the log | More simultaneous connections than `max_connections`, e.g. a device reconnecting in a loop | Find the device; raise the limit only if you really have that many panels |
 | No dashboard selected | Nothing is protected from the exclude list | Select the panel's dashboard in the web UI |
 | Dashboard has no saved configuration | An auto-generated dashboard shows *all* entities, the filter cannot know which are needed | Dashboard → ⋮ → Edit → *Take control*, save |
 | Selected dashboard no longer exists | Deleted or renamed | Remove the pill and pick the right dashboard |
@@ -100,6 +98,7 @@ Warnings appear in the add-on **Log** (orange, starting with `⚠ WARNING`) and 
 | `upstream` | `http://homeassistant:8123` | Home Assistant address as seen from the add-on |
 | `mode` | `exclude` | `exclude` or `include` (only dashboard entities pass – strict) |
 | `exclude_file` | `proxyfilter_exclude.txt` | Path inside the add-on's own config folder, must end in `.txt` or `.list`; created if missing |
+| `max_connections` | `20` | Maximum simultaneous websocket connections through port 8124 (a panel normally needs 1-2); extra ones get HTTP 503 |
 | `local_only` | `true` | Refuse connections from public IP addresses |
 | `trusted_proxies` | empty | Address/network of a reverse proxy placed *in front of* this add-on (its `X-Forwarded-For` is then trusted) |
 | `heavy_per_minute` | `20` | Updates/min above which a dashboard entity triggers a warning |
@@ -107,7 +106,14 @@ Warnings appear in the add-on **Log** (orange, starting with `⚠ WARNING`) and 
 | `min_per_minute` / `min_per_hour` | `2` / `120` | Entities below these rates are hidden in log reports |
 | `verbose` | `false` | Log every HTTP request |
 
-Dashboards and users are managed in the UI, not here.
+Dashboards, filter scope and users are managed in the web UI, not here.
+
+## Self-test and health
+
+The web UI has a **Self-test** card (also run at startup, summary in the log): Home Assistant reachable, folders
+readable/writable, dashboards found, exclude file usable, aiohttp version. Press **Run again** after fixing something.
+Below it the add-on shows repeated failures (upstream connection, reload job) and how many connections were refused
+because of `max_connections`.
 
 ## Log reports
 
@@ -119,7 +125,23 @@ After start and whenever the panel connects after being idle you get ten per-min
     19.0/min  sensor.example_meter_l1  [passed]
 ```
 
-## Client addresses, bans and `trusted_proxies` (important)
+## Troubleshooting
+
+| Symptom | Cause / fix |
+|---|---|
+| Panel shows login but nothing is filtered | By-user mode: the panel's user is not selected in Setup, or the log says `ws user … passthrough`; the name must match the Home Assistant display name. Or the panel is not using port 8124. |
+| "Filtered / open connections" stays 0 | The panel does not use `:8124` yet. Check the server URL in the Companion app. |
+| Add-on build fails with a network/timeout error | The Pi cannot reach the container registry. Check DNS/internet (`ha dns restart`), then Rebuild. |
+| A card on the panel stays empty | The entity is in the exclude list *and* not found on a selected dashboard (e.g. a YAML-mode dashboard or an entity used only inside a custom card template). Add the dashboard, or remove the pattern; **Check an entity** shows why it is blocked. |
+| Panel login loops | Open the add-on log; `login … -> 4xx` lines show the upstream answer. Check `upstream`. |
+| Filter seems stuck after a Home Assistant restart | The panel reconnects by itself; restart the Companion app if it does not. |
+
+**Limitations:** dashboards in YAML mode are not listed in the UI (their entities cannot be read from storage) –
+convert them to storage mode or protect their entities by not excluding them. Entities referenced only through
+templates generated at runtime cannot be detected; they are protected only if their id appears in the dashboard
+configuration.
+
+## Advanced: client addresses, bans and `trusted_proxies`
 
 Home Assistant only sees the add-on as the sender of every request. For failed-login bans, "local only" users and
 trusted networks to keep working, tell Home Assistant to trust the add-on's forwarded address in `configuration.yaml`:
@@ -139,38 +161,17 @@ their address.
 If you keep nginx (or similar) in front of the add-on, put that proxy's address in the add-on option
 `trusted_proxies`; only then is its `X-Forwarded-For` honoured. In *by user* mode no per-panel routing rules are needed.
 
-## First-run checklist
+## Updating
 
-1. The add-on log shows `listening … web UI …` and no `NOT reachable` warning.
-2. The sidebar page opens and lists your dashboards (and users).
-3. After step 3 the status block shows `1 / 1` filtered connections within a minute of the panel connecting.
-4. The log shows `ws auth … OK` (and, in by-user mode, `ws user … FILTERED`).
-5. "Traffic removed" rises once the exclude file contains patterns.
-6. If you see the orange *not set up for reverse proxies* warning, add the shown `http:` block and restart HA.
+* Install the add-on **from the repository** (Settings → Add-ons → Add-on Store → ⋮ → Repositories). A copy placed in
+  the `/addons` folder is a *local* add-on: Home Assistant never updates those.
+* Turn on **Auto update** on the add-on's Info tab to install new versions automatically, or press **Update**
+  yourself. The store refreshes about once a day; use ⋮ → **Check for updates** to refresh now.
+* An update rebuilds the container on your device (no prebuilt image), which can take a few minutes on a Raspberry Pi.
+  The panel reconnects by itself afterwards.
+* Your dashboards, filter scope, throttles and exclude file are kept. The log shows `updated from X to Y`.
 
-## Troubleshooting
+## Privacy and security
 
-| Symptom | Cause / fix |
-|---|---|
-| Panel shows login but nothing is filtered | By-user mode: the panel's user is not selected (step 2), or the log says `ws user … passthrough`; the name must match the Home Assistant display name. Or the panel is not using port 8124. |
-| "Filtered / open connections" stays 0 | The panel does not use `:8124` yet. Check the server URL in the Companion app. |
-| Add-on build fails with a network/timeout error | The Pi cannot reach the container registry. Check DNS/internet (`ha dns restart`), then Rebuild. |
-| A card on the panel stays empty | The entity is in the exclude list *and* not found on a selected dashboard (e.g. a YAML-mode dashboard or an entity used only inside a custom card template). Add the dashboard, or remove the pattern; **Check an entity** shows why it is blocked. |
-| Panel login loops | Open the add-on log; `login … -> 4xx` lines show the upstream answer. Check `upstream`. |
-| Filter seems stuck after a Home Assistant restart | The panel reconnects by itself; restart the Companion app if it does not. |
-
-**Limitations:** dashboards in YAML mode are not listed in the UI (their entities cannot be read from storage) –
-convert them to storage mode or protect their entities by not excluding them. Entities referenced only through
-templates generated at runtime cannot be detected; they are protected only if their id appears in the dashboard
-configuration.
-
-## Privacy & security
-
-* The Home Assistant config folder is mapped **read-only**. The add-on can write only in its **own** config folder
-  (the exclude file) and its private `/data` (UI choices). It cannot change your Home Assistant configuration. It reads `.storage/lovelace*` (dashboards), `.storage/core.entity_registry` and `core.device_registry` (which entities belong to a
-  device/area), `.storage/auth` (display names of users, nothing else)
-  and `.storage/core.config` (time zone).
-* The web UI is only reachable through Home Assistant's ingress (admins only).
-* Port 8124 forwards to Home Assistant, which does the authentication. By default (`local_only`) connections from
-  public IP addresses are refused. Never port-forward 8124; see [SECURITY.md](../SECURITY.md).
-* Access tokens are held in memory as a hash for 5 minutes (to avoid repeated lookups) and never logged.
+What the add-on reads and writes, the threat model and hardening advice are in
+[SECURITY.md](https://github.com/GruttePier013/proxyfilter-wallpanel-addon/blob/main/SECURITY.md).

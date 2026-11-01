@@ -1,33 +1,36 @@
 configuration:
   upstream:
-    name: Home Assistant URL
-    description: "👉 **STEP 1 ▶ Start the WEB-UI to complete the configuration** (pick your dashboards and filter scope there). The options below are advanced and rarely need changing.\n\nAddress of Home Assistant as seen from this add-on. Leave the default unless you changed it."
+    name: "Home Assistant URL"
+    description: "👉 **Step 1: start the web UI to finish the setup.** Dashboards and filter scope are chosen there; the options below are advanced.\n\nAddress of Home Assistant as seen from this add-on (default http://homeassistant:8123)."
   mode:
-    name: Mode
-    description: "exclude: everything is sent to the panel except what is in the exclude file (recommended, new entities keep working). include: ONLY entities on the selected dashboards are sent."
+    name: "Mode"
+    description: "exclude: send everything except the exclude file; include: send only dashboard entities (default exclude)."
   exclude_file:
-    name: Exclude file (in the add-on config folder)
-    description: "File in this add-on's own config folder (shown as addon_configs in Samba / File editor). Created automatically and editable in the add-on's web UI. Change its name/location here, e.g. packages/proxyfilter_exclude.txt. Must end in .txt or .list."
+    name: "Exclude file"
+    description: "File in the add-on's own config folder, .txt or .list; created automatically (default proxyfilter_exclude.txt)."
   local_only:
-    name: Local network only
-    description: "Refuse connections from public IP addresses (recommended). Turn off only if the panel connects from outside your network, and then use HTTPS in front."
+    name: "Local network only"
+    description: "Refuse connections from public IP addresses (default on)."
   trusted_proxies:
-    name: Trusted reverse proxies
-    description: "Only if you put nginx or similar IN FRONT of this add-on: its address or network (e.g. 192.168.1.5 or 172.30.32.0/23). Its X-Forwarded-For header is then trusted; from everybody else it is ignored."
+    name: "Trusted reverse proxies"
+    description: "Address or network of a reverse proxy in front of this add-on, e.g. 192.168.1.5 (default none)."
   heavy_per_minute:
-    name: Heavy entity warning (updates per minute)
-    description: "Dashboard entities that update more often than this get an orange warning in the log and the UI."
+    name: "Heavy entity warning"
+    description: "Warn when a dashboard entity updates more than this many times per minute (default 20)."
   top:
-    name: Lines per log report list
-    description: "How many entities per list in the log (0 = no lists)."
+    name: "Lines per log report list"
+    description: "Entities per list in the log reports, 0 for none (default 25)."
+  max_connections:
+    name: "Maximum connections"
+    description: "Maximum simultaneous websocket connections through port 8124; more get HTTP 503 (default 20)."
   min_per_minute:
-    name: Log threshold per minute
-    description: "Entities below this rate are hidden in the per-minute log reports."
+    name: "Log threshold per minute"
+    description: "Hide entities below this rate in the per-minute log reports (default 2)."
   min_per_hour:
-    name: Log threshold per hour
-    description: "Entities below this rate are hidden in the hourly log reports."
+    name: "Log threshold per hour"
+    description: "Hide entities below this rate in the hourly log reports (default 120)."
   verbose:
-    name: Log every HTTP request
-    description: "Normally only errors and logins are logged."
+    name: "Log every HTTP request"
+    description: "Log all requests, not only errors and logins (default off)."
 network:
   8124/tcp: "Filtered Home Assistant address for the wall panel"

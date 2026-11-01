@@ -31,7 +31,7 @@ header p{margin:0;color:var(--mute)}
 .warn{background:var(--warn-bg);border-left:4px solid var(--warn);border-radius:8px;padding:8px 12px;margin:6px 0;color:var(--ink)}
 .warn b{color:var(--warn)}
 .ok{border-left-color:var(--ok);background:transparent;border:1px solid var(--line);border-left:4px solid var(--ok)}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:10px}
 .stat{border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .stat b{display:block;font-size:22px}.stat span{color:var(--mute);font-size:12.5px}
 button.stat{background:var(--card);color:inherit;font:inherit;text-align:left;cursor:pointer}
@@ -58,6 +58,10 @@ td code{background:none;color:var(--ink);padding:0}
 .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px;background:var(--mute)}
 .dot.on{background:var(--ok)}
 details summary{cursor:pointer;color:var(--mute)}
+details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
+.block+.block{border-top:1px solid var(--line);margin-top:16px;padding-top:16px}
+.block:first-of-type{margin-top:14px}
+.block h2{margin-bottom:4px}
 </style>
 </head>
 <body>
@@ -71,16 +75,23 @@ details summary{cursor:pointer;color:var(--mute)}
   <div><h1>Proxyfilter for photo/wallpanel <small>v__VERSION__</small></h1><p>Keeps the entity traffic to your wall panel small, so it stays fast.</p></div>
 </header>
 
+<section class="card" id="summary">
+  <div id="status-line" class="msg" style="margin:0 0 10px;font-size:15px"></div>
+  <div class="grid" id="stats"></div>
+  <div id="stat-detail" class="detail" hidden></div>
+</section>
+
 <div id="warnings"></div>
 
-<section class="card">
+<details class="card" id="setup"><summary id="setup-sum">Setup</summary>
+<div class="block">
   <h2><span class="step">1</span>Dashboards the wall panel opens</h2>
   <p class="sub">Every entity used on these dashboards is always sent to the panel, so they can never break. Click a dashed pill to add it.</p>
   <div class="pills" id="dash-on"></div>
   <div class="pills" id="dash-add"></div>
-</section>
+</div>
 
-<section class="card">
+<div class="block">
   <h2><span class="step">2</span>Which connections are filtered?</h2>
   <p class="sub">Choose how the add-on recognises the wall panel.</p>
   <div class="pills" id="scope"></div>
@@ -89,18 +100,17 @@ details summary{cursor:pointer;color:var(--mute)}
     <div class="pills" id="user-on"></div>
     <div class="pills" id="user-add"></div>
   </div>
-</section>
+</div>
 
-<section class="card">
+<div class="block">
   <h2><span class="step">3</span>Point the panel to the filter</h2>
   <p class="sub">In the Companion app of the wall panel set the server URL to: <code id="panel-url">http://&lt;home-assistant-ip&gt;:8124</code> and log in (as the selected user, if you chose that option).</p>
-  <div class="grid" id="stats"></div>
-  <div id="stat-detail" class="detail" hidden></div>
-  <div id="status-line" class="msg" style="margin-top:10px"></div>
-</section>
+</div>
+
+</details>
 
 <section class="card">
-  <h2><span class="step">4</span>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
+  <h2>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
   <p class="sub">One pattern per line (<code>sensor.example_*</code>). The file lives in this add-on's own config folder and is created for you; saving keeps a <code>.bak</code> copy. You can paste log lines; the entity is extracted. <b>Entities used on your selected dashboards are never blocked</b> &ndash; even when a pattern matches them.</p>
   <textarea id="ed" spellcheck="false" aria-label="Exclude file"></textarea>
   <div class="row"><button class="btn" id="save">Save</button><button class="btn sec" id="reload">Discard changes</button><span class="msg" id="save-msg"></span></div>
@@ -113,14 +123,6 @@ details summary{cursor:pointer;color:var(--mute)}
 </section>
 
 <section class="card">
-  <h2>Throttling</h2>
-  <p class="sub">Entities on the dashboard always reach the panel, even when they update every second. Slow a busy one down here: updates in between are held back and merged, and the latest value is always delivered.</p>
-  <table><thead><tr><th>Entity</th><th class="n">per min from HA</th><th>Throttle</th></tr></thead><tbody id="thr-rows"></tbody></table>
-  <p class="empty" id="thr-empty" hidden>No busy entities measured yet &ndash; connect the panel and give it a few minutes, or add an entity below.</p>
-  <div class="row"><input id="thr-entity" placeholder="sensor.example_power" spellcheck="false" style="flex:1;min-width:200px;background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:13px ui-monospace,Menlo,Consolas,monospace"><select id="thr-sec"></select><button class="btn sec" id="thr-add">Add throttle</button><span class="msg" id="thr-msg"></span></div>
-</section>
-
-<section class="card">
   <h2>Noisiest entities that still reach the panel</h2>
   <p class="sub">Measured while the panel is connected. Click <b>exclude</b> to add an entity to the editor above (then Save), or use a wildcard to cover a whole device.</p>
   <div class="pills" id="wild"></div>
@@ -128,13 +130,29 @@ details summary{cursor:pointer;color:var(--mute)}
   <p class="empty" id="cand-empty" hidden>Nothing noisy is reaching the panel right now (or it has not been connected long enough).</p>
 </section>
 
+<section class="card">
+  <h2>Throttling <small id="thr-count" style="font-weight:400;color:var(--mute)"></small></h2>
+  <p class="sub">Entities on the dashboard always reach the panel, even when they update every second. Slow a busy one down here: updates in between are held back and merged, and the latest value is always delivered.</p>
+  <table><thead><tr><th>Entity</th><th class="n">per min from HA</th><th>Throttle</th></tr></thead><tbody id="thr-rows"></tbody></table>
+  <p class="empty" id="thr-empty" hidden>No busy entities measured yet &ndash; connect the panel and give it a few minutes, or add an entity below.</p>
+  <div class="row"><input id="thr-entity" placeholder="sensor.example_power" spellcheck="false" style="flex:1;min-width:200px;background:var(--code);color:var(--code-ink);border:1px solid var(--line);border-radius:9px;padding:8px 10px;font:13px ui-monospace,Menlo,Consolas,monospace"><select id="thr-sec"></select><button class="btn sec" id="thr-add">Add throttle</button><span class="msg" id="thr-msg"></span></div>
+</section>
+
+<details class="card" id="selftest"><summary id="st-sum">Self-test</summary>
+  <p class="sub" style="margin-top:10px">Checks run at startup: Home Assistant reachable, folders readable and writable, dashboards found.</p>
+  <ul id="st-list" style="list-style:none;padding:0;margin:6px 0"></ul>
+  <div id="st-fail" class="sub"></div>
+  <div class="row"><button class="btn sec" id="st-run" type="button">Run again</button><span class="msg" id="st-msg"></span></div>
+</details>
+
 <details class="card"><summary>How does this work?</summary>
-<p class="sub" style="margin-top:10px">Home Assistant sends every state change of every entity to every open dashboard. A weak wall panel spends nearly all its CPU on updates it never displays. This add-on sits between the panel and Home Assistant, recognises the panel by its user and forwards only the entities it needs. Login, the dashboard itself and all other traffic pass through unchanged. If anything goes wrong, connections fall back to the unfiltered stream, so the panel keeps working.</p></details>
+<p class="sub" style="margin-top:10px">Home Assistant sends every state change of every entity to every open dashboard, and a weak wall panel spends its CPU on updates it never shows. This add-on sits between the panel and Home Assistant and forwards only what the panel needs; login and all other traffic pass through unchanged. More in the Documentation tab of the add-on.</p></details>
 </main>
 <script>
 "use strict";
 const $=id=>document.getElementById(id);
 let S=null, dirty=false;
+const INIT={};
 const api=(p,o)=>fetch("api/"+p,o).then(async r=>{const j=await r.json().catch(()=>({ok:false,error:"bad response"}));return {status:r.status,...j}});
 const post=(p,b)=>api(p,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(b)});
 function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
@@ -166,14 +184,16 @@ function toast(t){msg(t,"err")}
 function render(){
   const s=S;
   $("panel-url").textContent="http://"+location.hostname+":"+s.panel_port;
-  const w=$("warnings");w.replaceChildren();
-  for(const x of s.warnings){const d=el("div","warn");d.append(el("b",null,"⚠ "),document.createTextNode(x.text));w.append(d)}
+  const w=$("warnings");w.replaceChildren();const wl0=[];
+  for(const x of s.warnings){const d=el("div","warn");d.append(el("b",null,"⚠ "),document.createTextNode(x.text));wl0.push(d)}
   for(const h of s.heavy){const d=el("div","warn");d.append(el("b",null,"\u26a0 Heavy dashboard entity: "),document.createTextNode(h.entity+" updates "+h.rate+"\u00d7/min and always reaches the panel. Remove it from the dashboard, or slow it down: "));
     for(const sec of [5,10,30,60]){const p=el("button","pill add mini","max 1 per "+sec+" s");p.type="button";p.onclick=()=>setThrottle(h.entity,sec);d.append(p," ")}
-    w.append(d)}
+    wl0.push(d)}
   for(const t of s.throttled){const d=el("div","warn ok");d.append(el("b",null,"\u23f1 Throttled: "),document.createTextNode(t.entity+" \u2013 at most 1 update per "+t.seconds+" s (HA sends "+t.rate+"/min). "));
-    const p=el("button","pill add mini","remove");p.type="button";p.onclick=()=>setThrottle(t.entity,0);d.append(p);w.append(d)}
-  if(!s.warnings.length&&!s.heavy.length){const d=el("div","warn ok","✓ Setup looks good.");w.append(d)}
+    const p=el("button","pill add mini","remove");p.type="button";p.onclick=()=>setThrottle(t.entity,0);d.append(p);wl0.push(d)}
+  if(!s.warnings.length&&!s.heavy.length){const d=el("div","warn ok","✓ Setup looks good.");wl0.push(d)}
+  for(const d of wl0.slice(0,4))w.append(d);
+  if(wl0.length>4){const dt=document.createElement("details");dt.append(el("summary",null,(wl0.length-4)+" more notice(s)"));for(const d of wl0.slice(4))dt.append(d);w.append(dt)}
   pills($("dash-on"),$("dash-add"),s.settings.dashboards,
     s.dashboards.map(d=>({key:d.key,title:d.title,ok:d.exists,note:d.exists?"":"not saved yet"})),"dashboard",setDash,"No dashboard selected yet");
   const sc=$("scope");sc.replaceChildren();
@@ -184,19 +204,36 @@ function render(){
     :"Only connections that log in as the selected users are filtered, so one port can serve everybody. Create a dedicated user for the panel (Settings \u2192 People).";
   $("users-box").hidden=s.settings.scope!=="users";
   pills($("user-on"),$("user-add"),s.settings.users,s.users.map(u=>({key:u,title:u})),"user",setUsers,"Nobody selected \u2013 every connection is filtered");
+  const sd=s.settings.dashboards.length;
+  $("setup-sum").textContent="\u2699 Setup \u2013 "+sd+" dashboard"+(sd===1?"":"s")+" \u00b7 "+(s.settings.scope==="port"?"dedicated port":"by user")+" \u00b7 panel URL "+$("panel-url").textContent;
+  if(!INIT.setup){INIT.setup=true;$("setup").open=!(sd&&s.status.seconds_since_filtered!=null)}
+  const stl=$("st-list");stl.replaceChildren();
+  for(const c of (s.selftest&&s.selftest.checks)||[]){const li=el("li",null,(c.ok?"\u2713 ":"\u26a0 ")+c.text);if(!c.ok)li.style.color="var(--warn)";stl.append(li)}
+  if(!s.selftest)stl.append(el("li","empty","Running\u2026"));
+  const bad=((s.selftest&&s.selftest.checks)||[]).filter(c=>!c.ok).length,tot=((s.selftest&&s.selftest.checks)||[]).length;
+  const hasFail=Object.values(s.health.failures).some(v=>v.streak)||s.health.refused>0;
+  $("st-sum").textContent=(bad||hasFail?"\u26a0 ":"\u2713 ")+"Self-test \u2013 "+(!s.selftest?"running\u2026":bad?bad+" of "+tot+" checks need attention":"all "+tot+" checks OK")+(hasFail?" \u00b7 failures recorded":"");
+  if(!INIT.st&&s.selftest){INIT.st=true;$("selftest").open=!!(bad||hasFail)}
+  const hf=$("st-fail");hf.replaceChildren();
+  const fl=Object.entries(s.health.failures);
+  if(s.health.refused)hf.append(el("div",null,"\u26a0 "+s.health.refused+" connection(s) refused: limit of "+s.health.max_connections+" simultaneous connections reached."));
+  for(const [k,v] of fl)hf.append(el("div",null,(v.streak?"\u26a0 ":"\u2713 ")+k+": "+v.total+" failure(s) so far"+(v.streak?", "+v.streak+" in a row (last: "+v.last+")":", recovered")));
   const st=s.status,box=$("stats");box.replaceChildren();
   const add=(v,l,fn,key)=>{const d=el(fn?"button":"div","stat"+(fn&&OPEN===key?" open":""));if(fn){d.type="button";d.onclick=fn;d.title="Click to show the list"}d.append(el("b",null,v),el("span",null,l));box.append(d)};
-  add(st.filtered+" / "+st.clients,"filtered / open connections");
+  add(st.in_per_min?Math.round(100*(1-st.out_per_min/st.in_per_min))+"%":"–","traffic removed");
   add(st.in_per_min,"updates per min from HA");
   add(st.out_per_min,"updates per min to panel");
-  add(st.in_per_min?Math.round(100*(1-st.out_per_min/st.in_per_min))+"%":"–","traffic removed");
+  add(st.filtered+" / "+st.clients,"filtered / open connections");
   add(st.dashboard_entities,"dashboard entities",()=>toggleList("dashboard"),"dashboard");
   add(st.exclude_patterns,"exclude patterns",()=>toggleList("exclude"),"exclude");
   const sl=$("status-line");sl.replaceChildren();
   const on=st.filtered>0;
-  const dot=el("span","dot"+(on?" on":""));sl.append(dot,document.createTextNode(on?"A panel is connected and filtered.":
-    st.seconds_since_filtered==null?"No filtered connection seen yet – connect the panel with the URL above.":
-    (st.seconds_since_filtered<90?"Last filtered connection just now.":"Last filtered connection "+Math.round(st.seconds_since_filtered/60)+" min ago.")));
+  const dot=el("span","dot"+(on?" on":""));
+  const cut=st.in_per_min?Math.round(100*(1-st.out_per_min/st.in_per_min)):null;
+  sl.append(dot,document.createTextNode((on?"A panel is connected and filtered":
+    st.seconds_since_filtered==null?"No filtered connection seen yet \u2013 point the panel to the URL in Setup":
+    (st.seconds_since_filtered<90?"Last filtered connection just now":"Last filtered connection "+Math.round(st.seconds_since_filtered/60)+" min ago"))+
+    (on&&cut!=null?" \u00b7 "+cut+"% of the updates removed ("+st.in_per_min+" \u2192 "+st.out_per_min+" per min)":"")+"."));
   $("file-name").textContent=s.exclude.name?"("+s.exclude.name+")":"";
   const wl=$("wild");wl.replaceChildren();
   for(const x of s.wildcards){const p=el("button","pill add","+ "+x.pattern);p.type="button";p.append(el("small",null," "+x.entities+" entities · "+x.rate+"/min"));p.onclick=()=>addLine(x.pattern);wl.append(p)}
@@ -219,6 +256,7 @@ function renderThrottle(s){
     const sel=thrSelect(r.seconds||0,v=>setThrottle(r.entity,v));const tdSel=el("td");tdSel.append(sel);
     tr.append(td,el("td","n",r.rate?r.rate:"\u2013"),tdSel);tb.append(tr)}
   $("thr-empty").hidden=rows.length>0;
+  $("thr-count").textContent=s.throttled.length?"("+s.throttled.length+" active)":"";
   const add=$("thr-sec");if(!add.options.length){for(const [v,t] of THR_OPTS.slice(1)){const o=document.createElement("option");o.value=v;o.textContent=t;add.append(o)}add.value="5"}}
 $("thr-add").onclick=async()=>{const e=$("thr-entity").value.trim().toLowerCase();const m=$("thr-msg");m.className="msg";m.textContent="";
   if(!e){return}const r=await post("throttle",{entity:e,seconds:parseInt($("thr-sec").value,10)});
@@ -270,7 +308,10 @@ async function check(){const v=$("chk").value.trim();const out=$("chk-out");out.
   const r=await api("explain?entity="+encodeURIComponent(v));
   const d=el("div","warn"+(r.ok&&r.passes?" ok":""),r.ok?(r.entity+" \u2192 "+r.reason):(r.error||"error"));out.append(d)}
 $("chk-go").onclick=check;$("chk").addEventListener("keydown",e=>{if(e.key==="Enter")check()});
-async function refresh(){const r=await api("state");if(r.version){S=r;render()}}
+async function refresh(){if(document.hidden)return;const r=await api("state");
+  if(r.version){S=r;const a=document.activeElement;if(!(a&&a.tagName==="SELECT"))render()}}
+document.addEventListener("visibilitychange",()=>{if(!document.hidden)refresh()});
+$("st-run").onclick=async()=>{$("st-msg").textContent="running\u2026";const r=await post("selftest",{});if(r.ok){S=r.state;render();$("st-msg").textContent="done"}else $("st-msg").textContent=r.error||"failed"};
 (async()=>{await refresh();await loadEditor();setInterval(refresh,5000)})();
 </script>
 </body>

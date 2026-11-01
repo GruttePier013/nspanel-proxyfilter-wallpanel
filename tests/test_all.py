@@ -192,6 +192,12 @@ async def main():
     check(m == {"+": {"s": "2", "a": {"x": 5, "z": 9}}, "-": {"a": ["y"]}}, f"merge_diff keeps the latest value and attribute removals ({m})")
     check(md(None, {"+": {"s": "3"}}) == {"+": {"s": "3"}}, "merge_diff with nothing held")
 
+    import re as _re
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cfgv = _re.search(r'^version: "([^"]+)"', open(os.path.join(root, "proxyfilter_wallpanel", "config.yaml")).read(), _re.M).group(1)
+    topv = _re.search(r"^## (\S+)", open(os.path.join(root, "proxyfilter_wallpanel", "CHANGELOG.md")).read(), _re.M).group(1)
+    check(cfgv == wf.VERSION == topv, f"version consistent: config.yaml {cfgv}, script {wf.VERSION}, changelog {topv}")
+
     # ---- start mock HA + add-on
     mock = web.Application()
     mock.router.add_get("/api/websocket", mock_ws)
@@ -217,6 +223,33 @@ async def main():
     async with aiohttp.ClientSession() as s:
         st, j = await jget(s, "api/state")
         check(st == 200 and j["version"] and len(j["dashboards"]) == 3, "UI state endpoint")
+        st, j = await jpost(s, "api/selftest", {})
+        checks = j["state"]["selftest"]["checks"]
+        check(j["ok"] and len(checks) >= 6 and all(c["ok"] for c in checks), f"self-test runs and passes: {[c['text'] for c in checks if not c['ok']]}")
+        # connection limit
+        app["max_connections"] = 1
+        w1 = await s.ws_connect(f"http://127.0.0.1:{PROXY}/api/websocket")
+        try:
+            await s.ws_connect(f"http://127.0.0.1:{PROXY}/api/websocket")
+            check(False, "second websocket refused when the limit is 1")
+        except aiohttp.WSServerHandshakeError as e:
+            check(e.status == 503, "second websocket refused with 503 when the limit is reached")
+        await w1.close()
+        await asyncio.sleep(0.3)
+        app["max_connections"] = 20
+        w2 = await s.ws_connect(f"http://127.0.0.1:{PROXY}/api/websocket")
+        check(not w2.closed, "connections accepted again below the limit")
+        await w2.close()
+        st, j = await jget(s, "api/state")
+        check(j["health"]["refused"] >= 1, "refused connections are counted")
+        # failure counter
+        fa = {"fail": {}}
+        for _ in range(6):
+            wf.note_fail(fa, "reload", ValueError("boom"))
+        check(fa["fail"]["reload"]["streak"] == 6 and fa["fail"]["reload"]["total"] == 6, "failure counter counts consecutive failures")
+        wf.note_ok(fa, "reload")
+        check(fa["fail"]["reload"]["streak"] == 0 and fa["fail"]["reload"]["total"] == 6, "failure counter resets on success, keeps the total")
+        check(wf.UP_MAX == 64 * 1024 * 1024, "upstream message cap is set")
         async with s.get(f"http://127.0.0.1:{UI}/") as r:
             html = await r.text()
         check(r.status == 200 and "Proxyfilter for photo/wallpanel" in html and "__VERSION__" not in html, "UI page served")
@@ -425,6 +458,12 @@ async def scenarios():
         async with s.get(f"http://127.0.0.1:{PROXY}/echo", headers={"X-Forwarded-For": "192.168.1.77, not-an-ip"}) as r:
             j = await r.json()
     check(j["xff"] == "192.168.1.77, 127.0.0.1", f"trusted proxy: valid forwarded chain kept, junk dropped ({j['xff']})")
+    async with aiohttp.ClientSession() as s:
+        codes = []
+        for _ in range(130):
+            async with s.get(f"http://127.0.0.1:{UI}/api/state") as r:
+                codes.append(r.status)
+        check(429 in codes and codes[0] == 200, f"UI rate limit: 429 after {codes.index(429) if 429 in codes else '-'} requests")
     for r in runners:
         await r.cleanup()
     # option handling: exclude file must stay inside the add-on config folder

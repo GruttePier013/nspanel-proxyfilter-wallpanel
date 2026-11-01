@@ -1,8 +1,8 @@
 name: "Proxyfilter for photo/wallpanel"
-version: "2.0.0"
+version: "2.0.4"
 slug: proxyfilter_wallpanel
-description: "👉 Step 1: start the WEB-UI to complete the configuration (choose your dashboards). Proxy filter that forwards only the traffic relevant to a wallpanel, photo frame or other small hardware device running the HA Companion app. It limits the CPU load on the device, which helps most on small CPUs such as Rockchip RK3326/RK3566, Allwinner A133, Amlogic S905 or MediaTek MT8163."
-url: "https://github.com/YOUR-GITHUB-USER/proxyfilter-wallpanel-addon"
+description: "👉 Step 1: start the web UI to finish the setup. The filtering proxy keeps your wall-panel (like Sonoff, Tuya, Shelly) blazing fast by only forwarding traffic related to entities used in the dashboard you configured."
+url: "https://github.com/GruttePier013/proxyfilter-wallpanel-addon"
 arch:
   - aarch64
   - amd64
@@ -32,6 +32,7 @@ options:
   trusted_proxies: []
   heavy_per_minute: 20
   top: 25
+  max_connections: 20
   min_per_minute: 2
   min_per_hour: 120
   verbose: false
@@ -44,6 +45,7 @@ schema:
   exclude_file: match(^[A-Za-z0-9_][A-Za-z0-9_./-]*\.(txt|list)$)
   heavy_per_minute: float(1,)
   top: int(0,200)
+  max_connections: int(1,200)
   min_per_minute: float(0,)
   min_per_hour: float(0,)
   verbose: bool
