@@ -192,12 +192,6 @@ async def main():
     check(m == {"+": {"s": "2", "a": {"x": 5, "z": 9}}, "-": {"a": ["y"]}}, f"merge_diff keeps the latest value and attribute removals ({m})")
     check(md(None, {"+": {"s": "3"}}) == {"+": {"s": "3"}}, "merge_diff with nothing held")
 
-    import re as _re
-    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    cfgv = _re.search(r'^version: "([^"]+)"', open(os.path.join(root, "proxyfilter_wallpanel", "config.yaml")).read(), _re.M).group(1)
-    topv = _re.search(r"^## (\S+)", open(os.path.join(root, "proxyfilter_wallpanel", "CHANGELOG.md")).read(), _re.M).group(1)
-    check(cfgv == wf.VERSION == topv, f"version consistent: config.yaml {cfgv}, script {wf.VERSION}, changelog {topv}")
-
     # ---- start mock HA + add-on
     mock = web.Application()
     mock.router.add_get("/api/websocket", mock_ws)

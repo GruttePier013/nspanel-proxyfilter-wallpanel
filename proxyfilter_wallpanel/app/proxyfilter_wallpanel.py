@@ -36,7 +36,7 @@ from urllib.parse import urlsplit
 import aiohttp
 from aiohttp import WSMsgType, web
 
-VERSION = "2.0.3"
+VERSION = "2.0.0"
 
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
        "te", "trailers", "transfer-encoding", "upgrade", "host"}
@@ -214,7 +214,6 @@ class Settings:
     def __init__(self, path):
         self.path = path
         self.data = {"dashboards": [], "users": [], "scope": "port", "throttle": {}}
-        self.prev_version = None                  # version that wrote the file (None = first start)
         self.load()
 
     def load(self):
@@ -232,7 +231,6 @@ class Settings:
                 pass
             return
         raw = raw if isinstance(raw, dict) else {}
-        self.prev_version = str(raw.get("version"))[:20] if raw.get("version") else "older"
         for k in ("dashboards", "users"):
             v = raw.get(k)
             self.data[k] = [str(x)[:100] for x in v][:50] if isinstance(v, list) else []
@@ -246,7 +244,7 @@ class Settings:
 
     def save(self):
         os.makedirs(os.path.dirname(self.path) or ".", exist_ok=True)
-        atomic_write(self.path, json.dumps({"version": VERSION, **self.data}, indent=2))
+        atomic_write(self.path, json.dumps(self.data, indent=2))
 
 
 # ----------------------------------------------------------------------------- allow/deny
@@ -1212,13 +1210,6 @@ def make_ui(app):
 # ----------------------------------------------------------------------------- app setup
 async def make_app(args):
     settings = Settings(os.path.join(args.data_dir, "settings.json"))
-    if settings.prev_version and settings.prev_version != VERSION:
-        log(f"update        updated from {settings.prev_version} to {VERSION}; your dashboards, scope, throttles "
-            f"and exclude file are kept")
-    try:
-        settings.save()                                   # records the running version
-    except OSError as exc:
-        warn(f"cannot write settings to {settings.path}: {exc}")
     exclude_path = args.exclude_file[0] if args.exclude_file else None
     ensure_exclude_file(exclude_path)
     up = urlsplit(args.upstream)

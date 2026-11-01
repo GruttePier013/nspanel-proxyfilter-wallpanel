@@ -164,18 +164,6 @@ convert them to storage mode or protect their entities by not excluding them. En
 templates generated at runtime cannot be detected; they are protected only if their id appears in the dashboard
 configuration.
 
-## Updating
-
-* Install the add-on **from the repository** (Settings → Add-ons → Add-on Store → ⋮ → Repositories). A copy placed in
-  the `/addons` folder is a *local* add-on: Home Assistant never updates those.
-* Turn on **Auto update** on the add-on's Info tab to install new versions automatically, or press **Update**
-  yourself. The store refreshes about once a day; use ⋮ → **Check for updates** to refresh now.
-* An update rebuilds the container on your device (no prebuilt image), which can take a few minutes on a Raspberry Pi.
-  The panel reconnects by itself afterwards.
-* Your dashboards, filter scope, throttles and exclude file are kept. The log shows `updated from X to Y`.
-* Maintainers: every release must raise `version` in `config.yaml` (and the script and top changelog entry; the tests
-  and CI check they match). Without a new version number Home Assistant sees nothing to update.
-
 ## Privacy & security
 
 * The Home Assistant config folder is mapped **read-only**. The add-on can write only in its **own** config folder

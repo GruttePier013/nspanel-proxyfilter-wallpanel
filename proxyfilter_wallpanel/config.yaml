@@ -1,5 +1,5 @@
 name: "Proxyfilter for photo/wallpanel"
-version: "2.0.3"
+version: "2.0.0"
 slug: proxyfilter_wallpanel
 description: "👉 Step 1: start the WEB-UI to complete the configuration (choose your dashboards). Proxy filter that forwards only the traffic relevant to a wallpanel, photo frame or other small hardware device running the HA Companion app. It limits the CPU load on the device, which helps most on small CPUs such as Rockchip RK3326/RK3566, Allwinner A133, Amlogic S905 or MediaTek MT8163."
 url: "https://github.com/YOUR-GITHUB-USER/proxyfilter-wallpanel-addon"
