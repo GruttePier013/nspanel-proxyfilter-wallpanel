@@ -4,6 +4,28 @@ All notable changes to this add-on. Format based on [Keep a Changelog](https://k
 Every release bumps `version` in `config.yaml`; that is what makes Home Assistant offer (and, with *Auto update*
 enabled, install) the update.
 
+## 2.0.5
+
+### Changed
+- **Release stage is now stable** (was experimental).
+- **Store subtitle** is now "Proxy for photo/wallpanels. Better hardware focus of cpu, memory on the specific
+  dashboards you use on this device."
+- **Documentation tab rewritten** with a contents line and four parts: quick start, how filtering works, everyday use
+  (exclude list, *Check an entity*, throttling) and reference (options, warnings, self-test, log reports), followed by
+  troubleshooting, advanced settings and updating.
+- **Web UI titles and descriptions reworded** to match: new subtitle, "Dashboards this device uses", "How is the panel
+  recognised?", "Connect the panel", "Exclude list: what the panel does not need", "Throttling: slow down busy
+  entities".
+- **Default port 8124** is documented under *Network* and in the quick start; every option already ships with a default
+  value in the Configuration tab.
+- **Companion app instructions**: step-by-step how to point the wall panel to port 8124.
+- **Add-on linter clean-up** (Home Assistant 2025.12 and later): the Supervisor `watchdog` option is replaced by a
+  Docker `HEALTHCHECK` on `/__health`; the deprecated `armv7` architecture and options that only repeat the default
+  value (`stage`, `startup`, `boot`, `ingress_port`, `panel_admin`) are removed from `config.yaml`.
+- Repository links now point to `GruttePier013/nspanel-proxyfilter-wallpanel`.
+- **Add-on page (README) rewritten** in the order a new user needs it: what you gain, what you can configure,
+  how to use it, which devices it suits. The "start the web UI" step is now step 1 of *How to use*.
+
 ## 2.0.4
 
 ### Added

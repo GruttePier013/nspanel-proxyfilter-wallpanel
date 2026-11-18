@@ -2,7 +2,7 @@
 
 # Proxyfilter for photo/wallpanel
 
-[![Add repository to my Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FGruttePier013%2Fproxyfilter-wallpanel-addon)
+[![Add repository to my Home Assistant](https://my.home-assistant.io/badges/supervisor_add_addon_repository.svg)](https://my.home-assistant.io/redirect/supervisor_add_addon_repository/?repository_url=https%3A%2F%2Fgithub.com%2FGruttePier013%2Fnspanel-proxyfilter-wallpanel)
 
 **The filtering proxy keeps your wall-panel (like Sonoff, Tuya, Shelly) blazing fast by only forwarding traffic related to entities used in the dashboard you configured.**
 
@@ -16,20 +16,21 @@
 
 ## Requirements
 
-- Home Assistant OS or Supervised (add-ons need the Supervisor); architectures aarch64, amd64, armv7
+- Home Assistant OS or Supervised (add-ons need the Supervisor); architectures aarch64 and amd64
 - A wall panel, tablet or photo frame running the Home Assistant Companion app
-- Status: **experimental**. Tested against a mock Home Assistant; please report problems in the issues
+- Covered by an automated test suite (mock Home Assistant); please report real-world problems in the issues
 
 ## Install
 
-1. Click the button above, or add `https://github.com/GruttePier013/proxyfilter-wallpanel-addon` under
+1. Click the button above, or add `https://github.com/GruttePier013/nspanel-proxyfilter-wallpanel` under
    **Settings → Add-ons → Add-on store → ⋮ → Repositories**.
 2. Install **Proxyfilter for photo/wallpanel** and start it.
-3. Open it in the sidebar and follow the *Setup* block.
+3. Open it in the sidebar and follow the *Setup* block. Then point the panel's Companion app to port 8124; the add-on's
+   Info tab (`proxyfilter_wallpanel/README.md`) has the step-by-step instructions.
 
 ## More
 
-[Documentation](proxyfilter_wallpanel/DOCS.md) · [Changelog](proxyfilter_wallpanel/CHANGELOG.md) · [Security](SECURITY.md) · [Issues](https://github.com/GruttePier013/proxyfilter-wallpanel-addon/issues) · [License](LICENSE)
+[Documentation](proxyfilter_wallpanel/DOCS.md) · [Changelog](proxyfilter_wallpanel/CHANGELOG.md) · [Security](SECURITY.md) · [Issues](https://github.com/GruttePier013/nspanel-proxyfilter-wallpanel/issues) · [License](LICENSE)
 
 ## Development
 

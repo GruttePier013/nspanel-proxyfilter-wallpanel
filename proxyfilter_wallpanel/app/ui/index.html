@@ -72,7 +72,7 @@ details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
   <rect x="24" y="32" width="80" height="52" rx="5" fill="#14335c"/><rect x="30" y="38" width="34" height="18" rx="3" fill="#4da3ff"/><rect x="68" y="38" width="30" height="18" rx="3" fill="#7cc4ff" opacity=".8"/>
   <rect x="30" y="60" width="22" height="18" rx="3" fill="#7cc4ff" opacity=".8"/><rect x="56" y="60" width="42" height="18" rx="3" fill="#4da3ff"/>
   <circle cx="100" cy="100" r="21" fill="#22c55e" stroke="#0f2a4a" stroke-width="4"/><path d="M89 92h22l-8 10v10l-6-3v-7z" fill="#fff"/></svg>
-  <div><h1>Proxyfilter for photo/wallpanel <small>v__VERSION__</small></h1><p>Keeps the entity traffic to your wall panel small, so it stays fast.</p></div>
+  <div><h1>Proxyfilter for photo/wallpanel <small>v__VERSION__</small></h1><p>Better focus of CPU and memory on the dashboards you use on this device.</p></div>
 </header>
 
 <section class="card" id="summary">
@@ -85,15 +85,15 @@ details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
 
 <details class="card" id="setup"><summary id="setup-sum">Setup</summary>
 <div class="block">
-  <h2><span class="step">1</span>Dashboards the wall panel opens</h2>
-  <p class="sub">Every entity used on these dashboards is always sent to the panel, so they can never break. Click a dashed pill to add it.</p>
+  <h2><span class="step">1</span>Dashboards this device uses</h2>
+  <p class="sub">Select the dashboard(s) your wall panel opens. Everything used on them always reaches the panel, so they never break. Click a dashed pill to add one.</p>
   <div class="pills" id="dash-on"></div>
   <div class="pills" id="dash-add"></div>
 </div>
 
 <div class="block">
-  <h2><span class="step">2</span>Which connections are filtered?</h2>
-  <p class="sub">Choose how the add-on recognises the wall panel.</p>
+  <h2><span class="step">2</span>How is the panel recognised?</h2>
+  <p class="sub">Choose which connections get the filtered stream.</p>
   <div class="pills" id="scope"></div>
   <p class="sub" id="scope-help"></p>
   <div id="users-box">
@@ -103,14 +103,14 @@ details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
 </div>
 
 <div class="block">
-  <h2><span class="step">3</span>Point the panel to the filter</h2>
-  <p class="sub">In the Companion app of the wall panel set the server URL to: <code id="panel-url">http://&lt;home-assistant-ip&gt;:8124</code> and log in (as the selected user, if you chose that option).</p>
+  <h2><span class="step">3</span>Connect the panel</h2>
+  <p class="sub">In the Home Assistant Companion app on the panel, set the server URL to: <code id="panel-url">http://&lt;home-assistant-ip&gt;:8124</code> and log in (as the selected user, if you chose that option).</p>
 </div>
 
 </details>
 
 <section class="card">
-  <h2>Entities the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
+  <h2>Exclude list: what the panel does not need <small id="file-name" style="font-weight:400;color:var(--mute)"></small></h2>
   <p class="sub">One pattern per line (<code>sensor.example_*</code>). The file lives in this add-on's own config folder and is created for you; saving keeps a <code>.bak</code> copy. You can paste log lines; the entity is extracted. <b>Entities used on your selected dashboards are never blocked</b> &ndash; even when a pattern matches them.</p>
   <textarea id="ed" spellcheck="false" aria-label="Exclude file"></textarea>
   <div class="row"><button class="btn" id="save">Save</button><button class="btn sec" id="reload">Discard changes</button><span class="msg" id="save-msg"></span></div>
@@ -123,7 +123,7 @@ details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
 </section>
 
 <section class="card">
-  <h2>Noisiest entities that still reach the panel</h2>
+  <h2>Noisiest entities still reaching the panel</h2>
   <p class="sub">Measured while the panel is connected. Click <b>exclude</b> to add an entity to the editor above (then Save), or use a wildcard to cover a whole device.</p>
   <div class="pills" id="wild"></div>
   <table><thead><tr><th>Entity</th><th class="n">per min</th><th></th></tr></thead><tbody id="cand"></tbody></table>
@@ -131,7 +131,7 @@ details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
 </section>
 
 <section class="card">
-  <h2>Throttling <small id="thr-count" style="font-weight:400;color:var(--mute)"></small></h2>
+  <h2>Throttling: slow down busy entities <small id="thr-count" style="font-weight:400;color:var(--mute)"></small></h2>
   <p class="sub">Entities on the dashboard always reach the panel, even when they update every second. Slow a busy one down here: updates in between are held back and merged, and the latest value is always delivered.</p>
   <table><thead><tr><th>Entity</th><th class="n">per min from HA</th><th>Throttle</th></tr></thead><tbody id="thr-rows"></tbody></table>
   <p class="empty" id="thr-empty" hidden>No busy entities measured yet &ndash; connect the panel and give it a few minutes, or add an entity below.</p>
@@ -145,8 +145,8 @@ details.card>summary{color:var(--ink);font-weight:600;font-size:15px}
   <div class="row"><button class="btn sec" id="st-run" type="button">Run again</button><span class="msg" id="st-msg"></span></div>
 </details>
 
-<details class="card"><summary>How does this work?</summary>
-<p class="sub" style="margin-top:10px">Home Assistant sends every state change of every entity to every open dashboard, and a weak wall panel spends its CPU on updates it never shows. This add-on sits between the panel and Home Assistant and forwards only what the panel needs; login and all other traffic pass through unchanged. More in the Documentation tab of the add-on.</p></details>
+<details class="card"><summary>What does this add-on do?</summary>
+<p class="sub" style="margin-top:10px">Home Assistant sends every state change of every entity to every open dashboard, and a weak wall panel spends its CPU on updates it never shows. This add-on sits between the panel and Home Assistant and forwards only what the panel needs; login and all other traffic pass through unchanged. Full guide: the Documentation tab of the add-on.</p></details>
 </main>
 <script>
 "use strict";
