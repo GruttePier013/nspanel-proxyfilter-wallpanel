@@ -1,0 +1,54 @@
+name: Release ZIP
+
+# Builds a ZIP of the repository for a release, runs the test suite on exactly that
+# code and attaches the ZIP (plus a SHA-256 file) to the GitHub release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to build and attach to (default: v<version> from config.yaml)"
+        required: false
+  push:
+    branches: ["attach-zip/**"]
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Pick the release tag
+        id: tag
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          if [ -z "$TAG" ]; then
+            VERSION=$(sed -n 's/^version: "\(.*\)"/\1/p' proxyfilter_wallpanel/config.yaml)
+            TAG="v$VERSION"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "Using tag $TAG"
+      - name: Check out the tagged code
+        run: git checkout "refs/tags/${{ steps.tag.outputs.tag }}"
+      - name: Run the tests
+        run: |
+          pip install aiohttp
+          python tests/test_all.py
+      - name: Build the ZIP
+        run: |
+          NAME="nspanel-proxyfilter-wallpanel-${{ steps.tag.outputs.tag }}"
+          git archive --format=zip --prefix="$NAME/" -o "$NAME.zip" HEAD
+          sha256sum "$NAME.zip" > "$NAME.zip.sha256"
+          cat "$NAME.zip.sha256"
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release upload "${{ steps.tag.outputs.tag }}" nspanel-proxyfilter-wallpanel-*.zip nspanel-proxyfilter-wallpanel-*.zip.sha256 --clobber
