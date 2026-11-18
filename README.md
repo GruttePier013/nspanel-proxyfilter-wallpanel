@@ -40,5 +40,8 @@ python3 tests/test_all.py        # end-to-end and security tests against a mock 
 python3 assets/make_logos.py     # re-render icon.png and logo.png (needs playwright)
 ```
 
+Publishing a GitHub release runs `.github/workflows/release-zip.yaml`: it tests the tagged code and attaches a ZIP of
+the repository plus a SHA-256 file to the release.
+
 Every release raises `version` in `proxyfilter_wallpanel/config.yaml`, in the script and in the top entry of the
 changelog; the tests and CI check that they match. Without a new version number Home Assistant offers no update.
