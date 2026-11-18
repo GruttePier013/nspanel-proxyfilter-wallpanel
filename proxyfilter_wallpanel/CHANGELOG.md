@@ -19,6 +19,9 @@ enabled, install) the update.
 - **Default port 8124** is documented under *Network* and in the quick start; every option already ships with a default
   value in the Configuration tab.
 - **Companion app instructions**: step-by-step how to point the wall panel to port 8124.
+- **Add-on linter clean-up** (Home Assistant 2025.12 and later): the Supervisor `watchdog` option is replaced by a
+  Docker `HEALTHCHECK` on `/__health`; the deprecated `armv7` architecture and options that only repeat the default
+  value (`stage`, `startup`, `boot`, `ingress_port`, `panel_admin`) are removed from `config.yaml`.
 - Repository links now point to `GruttePier013/nspanel-proxyfilter-wallpanel`.
 - **Add-on page (README) rewritten** in the order a new user needs it: what you gain, what you can configure,
   how to use it, which devices it suits. The "start the web UI" step is now step 1 of *How to use*.

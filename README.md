@@ -16,7 +16,7 @@
 
 ## Requirements
 
-- Home Assistant OS or Supervised (add-ons need the Supervisor); architectures aarch64, amd64, armv7
+- Home Assistant OS or Supervised (add-ons need the Supervisor); architectures aarch64 and amd64
 - A wall panel, tablet or photo frame running the Home Assistant Companion app
 - Covered by an automated test suite (mock Home Assistant); please report real-world problems in the issues
 
