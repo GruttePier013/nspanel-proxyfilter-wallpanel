@@ -483,6 +483,15 @@ async def scenarios():
         check(False, "exclude_file symlink escape blocked")
     except SystemExit:
         check(True, "exclude_file symlink escape blocked")
+    ns2 = wf.parse_args(["--upstream", "http://x", "--exclude-dir", tmp])
+    json.dump({"dashboards": ["wallpanel"], "scope": "port", "users": [], "top": 10}, open(od, "w"))
+    wf.apply_options(ns2, od)
+    check(sorted(ns2.obsolete_options) == ["dashboards", "scope", "users"] and ns2.top == 10,
+          "obsolete options are detected and the other options still apply")
+    ns3 = wf.parse_args(["--upstream", "http://x", "--exclude-dir", tmp])
+    json.dump({"top": 10}, open(od, "w"))
+    wf.apply_options(ns3, od)
+    check(ns3.obsolete_options == {}, "no obsolete options when the configuration is clean")
     check(wf.clean("a\nb\x1b[0m") == "a?b?[0m", "clean() strips control characters")
     await mr.cleanup()
     shutil.rmtree(tmp)

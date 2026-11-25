@@ -111,6 +111,9 @@ web UI, not here.
 | `min_per_minute` / `min_per_hour` | `2` / `120` | Entities below these rates are hidden in log reports |
 | `verbose` | `false` | Log every HTTP request |
 
+The Supervisor warns about `dashboards`, `scope` or `users` in your saved options? They are left over from an earlier
+release and not used any more; remove them via **Configuration → ⋮ → Edit in YAML** and save.
+
 **Network.** The filtered port is **8124** by default. To use another port, change it under *Network* in the
 Configuration tab; the Companion app must then use the same port. (The web UI keeps showing 8124.)
 
