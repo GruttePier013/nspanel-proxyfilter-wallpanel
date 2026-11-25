@@ -4,6 +4,15 @@ All notable changes to this add-on. Format based on [Keep a Changelog](https://k
 Every release bumps `version` in `config.yaml`; that is what makes Home Assistant offer (and, with *Auto update*
 enabled, install) the update.
 
+## 2.0.6
+
+### Fixed
+- **Supervisor warnings** `Option 'dashboards' / 'scope' / 'users' does not exist in the schema`, repeated every
+  15 minutes: these options belonged to an earlier release and stay in your saved add-on options after an update.
+  They are not used any more (dashboards, scope and users are chosen in the web UI). The add-on now logs one orange
+  notice with the old values and the *Self-test* card shows it; to clear the warnings open **Configuration → ⋮ →
+  Edit in YAML**, remove `dashboards`, `scope` and `users` and save.
+
 ## 2.0.5
 
 ### Changed

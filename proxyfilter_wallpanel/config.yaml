@@ -1,5 +1,5 @@
 name: "Proxyfilter for photo/wallpanel"
-version: "2.0.5"
+version: "2.0.6"
 slug: proxyfilter_wallpanel
 description: "Proxy for photo/wallpanels. Better hardware focus of cpu, memory on the specific dashboards you use on this device."
 url: "https://github.com/GruttePier013/nspanel-proxyfilter-wallpanel"

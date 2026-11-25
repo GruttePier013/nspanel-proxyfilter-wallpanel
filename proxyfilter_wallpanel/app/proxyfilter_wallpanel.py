@@ -36,7 +36,7 @@ from urllib.parse import urlsplit
 import aiohttp
 from aiohttp import WSMsgType, web
 
-VERSION = "2.0.5"
+VERSION = "2.0.6"
 
 HOP = {"connection", "keep-alive", "proxy-authenticate", "proxy-authorization",
        "te", "trailers", "transfer-encoding", "upgrade", "host"}
@@ -667,6 +667,10 @@ async def selftest(app):
         ok = os.path.isfile(ep) and os.access(ep, os.R_OK | os.W_OK)
         add(ok, f"exclude file {os.path.basename(ep)} readable and writable" if ok
             else f"exclude file {ep} missing or not readable/writable")
+    old = args.obsolete_options
+    add(not old, "no obsolete options in the add-on configuration" if not old else
+        f"obsolete option(s) {', '.join(old)} in the add-on configuration: remove them (Configuration \u2192 \u22ee \u2192 "
+        f"Edit in YAML) to stop the Supervisor warning; dashboards, scope and users are set in the web UI")
     dd = os.path.dirname(app["settings"].path) or "."
     add(os.access(dd, os.W_OK), "add-on data folder writable" if os.access(dd, os.W_OK)
         else f"cannot write to {dd}: UI choices will be lost on restart")
@@ -1383,6 +1387,11 @@ async def make_app(args):
     return app
 
 
+# Options that earlier releases had in the add-on configuration. Dashboards, scope and users are chosen in the web UI
+# now; stored values stay in options.json until the user removes them, which makes the Supervisor warn about them.
+OBSOLETE_OPTIONS = ("dashboards", "scope", "users")
+
+
 def apply_options(args, path):
     """Apply the add-on configuration (/data/options.json) to the parsed arguments."""
     with open(path, encoding="utf-8") as fh:
@@ -1413,11 +1422,18 @@ def apply_options(args, path):
     if o.get("local_only") is not None:
         args.local_only = bool(o["local_only"])
     args.trusted_proxy += [str(x) for x in (o.get("trusted_proxies") or [])]
+    args.obsolete_options = {k: o[k] for k in OBSOLETE_OPTIONS if k in o}
+    if args.obsolete_options:
+        old = ", ".join(f"{k} = {clean(json.dumps(v))}" for k, v in args.obsolete_options.items())
+        warn(f"obsolete options in the add-on configuration ({old}). They are not used any more: choose dashboards, "
+             f"scope and users in the web UI. To silence the Supervisor warning open Configuration \u2192 \u22ee \u2192 "
+             f"Edit in YAML, remove these keys and save.")
 
 
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--upstream", default=None, help="e.g. http://homeassistant:8123")
+    ap.set_defaults(obsolete_options={})
     ap.add_argument("--options", help="add-on options.json")
     ap.add_argument("--config-dir", default="/homeassistant", help="HA config folder")
     ap.add_argument("--data-dir", default="/data", help="where the UI settings are stored")
